@@ -1,14 +1,9 @@
 {
-  "version": "1.1.0",
+  "version": "1.1.1",
   "date": "2026-11-14",
   "new": [
-    "Nút \"Quét trang con\": mở ngầm từng trang ảnh được liên kết từ trang đang xem (kể cả các trang 2, 3… của gallery) để lấy ảnh lớn bên trong",
-    "Bắt và tải video YouTube: mở trang video là có ngay mục \"Video của trang này\" trong danh sách",
-    "Tải được video dạng luồng",
-    "Chọn chất lượng video trong Cài đặt (4K, 1080p, 720p, 480p hoặc chỉ âm thanh)"
+    "Logo chính thức của M-Download"
   ],
-  "improved": [
-    "Danh sách tự làm mới khi trang đổi nội dung mà không tải lại"
-  ],
+  "improved": [],
   "fixed": []
 }
