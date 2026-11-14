@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, session, shell, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell, dialog, Menu, net } = require('electron');
+const { spawn, execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { Readable } = require('stream');
@@ -14,7 +15,7 @@ let ses = null;
 
 /* ---------- cài đặt ---------- */
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
-let settings = { saveDir: '', minSize: 300, hideSmall: true, bounds: null, done: [] };
+let settings = { saveDir: '', minSize: 300, hideSmall: true, videoQuality: '1080', ytUpdated: 0, bounds: null, done: [] };
 function loadSettings() {
   try { Object.assign(settings, JSON.parse(fs.readFileSync(settingsFile(), 'utf8'))); } catch { /* lần đầu mở */ }
   if (!settings.saveDir) settings.saveDir = path.join(app.getPath('downloads'), 'M-Download');
@@ -40,6 +41,7 @@ function classify(d) {
   const p = urlPathname(d.url);
   const size = parseInt(h['content-length'] || '0', 10) || 0;
   let type = null;
+  try { if (/(^|\.)googlevideo\.com$/.test(new URL(d.url).hostname)) return null; } catch { return null; }  // mảnh video YouTube
   if (ct === 'video/mp2t' || /\.(ts|m4s)$/i.test(p)) return null;          // mảnh luồng, bỏ qua
   if (/mpegurl|dash\+xml/.test(ct) || /\.(m3u8|mpd)$/i.test(p)) type = 'stream';
   else if (ct.startsWith('video/') || ct.startsWith('audio/') || MEDIA_EXT.test(p)) type = 'vid';
@@ -90,7 +92,7 @@ function summary(b) {
   return {
     id: b.id, title: b.title, dir: b.dir, isChapter: b.isChapter, state: b.state, count: b.items.length, done, failed,
     got: b.items.reduce((s, i) => s + i.got, 0), total: b.items.reduce((s, i) => s + (i.total || 0), 0),
-    speed: b.speed || 0, file: b.items.length === 1 ? b.items[0].dest : b.dir,
+    speed: b.speed || 0, note: b.note || '', kind: b.kind || 'file', file: b.items.length === 1 ? b.items[0].dest : b.dir,
   };
 }
 function pushState() {
@@ -126,7 +128,7 @@ async function runItem(b, it) {
   try {
     let have = 0;
     try { have = fs.statSync(part).size; } catch { /* chưa có */ }
-    referers.set(it.url, b.referer);
+    referers.set(it.url, it.ref || b.referer);
     const res = await ses.fetch(it.url, { signal: ctrl.signal, headers: have ? { Range: `bytes=${have}-` } : {} });
     if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
     const append = have > 0 && res.status === 206;
@@ -162,6 +164,7 @@ async function runItem(b, it) {
 function pump() {
   for (const b of batches) {
     if (b.state !== 'running') continue;
+    if (b.kind === 'ytdl') { if (!b.proc && !b.starting && b.items[0].state === 'queued') startYtdl(b); continue; }
     for (const it of b.items) {
       if (running >= MAX_PARALLEL) return;
       if (it.state !== 'queued') continue;
@@ -172,12 +175,132 @@ function pump() {
   }
 }
 
+/* ---------- tải video bằng yt-dlp (YouTube, video dạng luồng…) ---------- */
+const isWin = process.platform === 'win32';
+const toolsDir = () => path.join(app.getPath('userData'), 'tools');
+const ytPath = () => path.join(toolsDir(), isWin ? 'yt-dlp.exe' : process.platform === 'darwin' ? 'yt-dlp_macos' : 'yt-dlp_linux');
+const ffPath = () => path.join(toolsDir(), 'ffmpeg.exe');
+const YT_URL = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/';
+const FF_URL = 'https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip';
+
+async function fetchToFile(url, dest, onProgress) {
+  const res = await net.fetch(url);
+  if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
+  const total = parseInt(res.headers.get('content-length') || '0', 10) || 0;
+  let got = 0;
+  await new Promise((resolve, reject) => {
+    const out = fs.createWriteStream(dest + '.tmp');
+    const src = Readable.fromWeb(res.body);
+    src.on('data', (c) => { got += c.length; if (total) onProgress(Math.round((got / total) * 100)); });
+    src.on('error', (e) => { out.destroy(); reject(e); }); out.on('error', reject); out.on('finish', resolve);
+    src.pipe(out);
+  });
+  fs.renameSync(dest + '.tmp', dest);
+}
+function findFile(dir, name) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) { const r = findFile(p, name); if (r) return r; } else if (e.name.toLowerCase() === name) return p;
+  }
+  return null;
+}
+let toolsJob = null;
+function ensureTools(onNote) {
+  if (!toolsJob) {
+    toolsJob = (async () => {
+      fs.mkdirSync(toolsDir(), { recursive: true });
+      if (!fs.existsSync(ytPath())) {
+        await fetchToFile(YT_URL + path.basename(ytPath()), ytPath(), (p) => onNote(`Đang tải công cụ video (chỉ lần đầu)… ${p}%`));
+        if (!isWin) fs.chmodSync(ytPath(), 0o755);
+        settings.ytUpdated = Date.now(); saveSettings();
+      }
+      if (isWin && !fs.existsSync(ffPath())) {
+        try {   // ffmpeg để ghép hình + tiếng (cần cho 1080p trở lên)
+          const zip = path.join(toolsDir(), 'ffmpeg.zip'), tmp = path.join(toolsDir(), 'ffmpeg-tmp');
+          await fetchToFile(FF_URL, zip, (p) => onNote(`Đang tải bộ ghép video (chỉ lần đầu)… ${p}%`));
+          onNote('Đang giải nén bộ ghép video…');
+          fs.rmSync(tmp, { recursive: true, force: true }); fs.mkdirSync(tmp, { recursive: true });
+          await new Promise((res, rej) => execFile('tar', ['-xf', zip, '-C', tmp], { windowsHide: true }, (e) => (e ? rej(e) : res())));
+          const exe = findFile(tmp, 'ffmpeg.exe');
+          if (exe) fs.copyFileSync(exe, ffPath());
+          fs.rmSync(tmp, { recursive: true, force: true }); fs.rmSync(zip, { force: true });
+        } catch { /* không có ffmpeg: vẫn tải được nhưng chất lượng thấp hơn */ }
+      }
+      return { yt: ytPath(), ff: isWin ? (fs.existsSync(ffPath()) ? toolsDir() : null) : 'system' };
+    })().finally(() => { toolsJob = null; });
+  }
+  return toolsJob;
+}
+function updateYtdlp() {
+  if (!fs.existsSync(ytPath()) || Date.now() - (settings.ytUpdated || 0) < 3 * 864e5) return;
+  settings.ytUpdated = Date.now(); saveSettings();
+  execFile(ytPath(), ['-U'], { windowsHide: true }, () => {});
+}
+function killProc(b) {
+  if (!b.proc) return;
+  if (isWin) execFile('taskkill', ['/pid', String(b.proc.pid), '/T', '/F'], { windowsHide: true }, () => {});
+  else b.proc.kill();
+}
+function ytError(text) {
+  if (/Sign in|age|confirm you.re not a bot|login/i.test(text)) return 'Video cần đăng nhập hoặc bị giới hạn, không tải được';
+  if (/Unsupported URL/i.test(text)) return 'Trang này chưa được hỗ trợ tải video';
+  if (/Private video|unavailable|removed/i.test(text)) return 'Video không còn hoặc ở chế độ riêng tư';
+  if (/DRM/i.test(text)) return 'Video có khoá bản quyền, không tải được';
+  return 'Tải video lỗi · bấm để thử lại';
+}
+async function startYtdl(b) {
+  const it = b.items[0];
+  b.starting = true; it.state = 'running'; b.note = 'Đang chuẩn bị…'; dirty = true;
+  try {
+    const t = await ensureTools((n) => { b.note = n; dirty = true; });
+    if (b.state !== 'running') { it.state = 'queued'; return; }
+    b.note = 'Đang lấy thông tin video…'; dirty = true;
+    const q = b.quality, h = /^\d+$/.test(q) ? `[height<=${q}]` : '';
+    const fmt = q === 'audio' ? 'ba[ext=m4a]/ba/b' : t.ff ? `bv*${h}+ba/b${h}/b` : `b${h}/b`;
+    const name = b.stream ? b.title.replace(/%/g, '%%') + '.%(ext)s' : '%(title).120s.%(ext)s';
+    const args = ['-f', fmt, '-o', path.join(b.dir, name), '--no-playlist', '--newline', '--progress', '--no-warnings', '--windows-filenames',
+      '--no-mtime', '--encoding', 'utf-8', '--print', 'after_move:MDLFILE|%(filepath)s',
+      '--progress-template', 'download:MDL|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s'];
+    if (q !== 'audio') args.push('--merge-output-format', 'mp4');
+    if (t.ff && t.ff !== 'system') args.push('--ffmpeg-location', t.ff);
+    if (b.stream && b.referer) args.push('--referer', b.referer);
+    args.push(it.url);
+    const proc = spawn(t.yt, args, { windowsHide: true });
+    b.proc = proc;
+    let buf = '', err = '';
+    proc.stdout.on('data', (c) => {
+      buf += c.toString('utf8');
+      const lines = buf.split(/\r?\n/); buf = lines.pop();
+      for (const l of lines) {
+        if (l.startsWith('MDL|')) {
+          const [, g, tot, est] = l.split('|');
+          it.got = parseInt(g, 10) || 0; it.total = parseInt(tot, 10) || parseInt(est, 10) || 0; b.note = '';
+        } else if (l.startsWith('MDLFILE|')) { it.dest = l.slice(8).trim(); b.title = path.basename(it.dest); }
+      }
+    });
+    proc.stderr.on('data', (c) => { err = (err + c.toString('utf8')).slice(-2000); });
+    proc.on('error', () => { err = err || 'spawn'; });
+    proc.on('close', (code) => {
+      b.proc = null;
+      if (b.state === 'running') {
+        if (code === 0) { it.state = 'done'; try { it.got = fs.statSync(it.dest).size; } catch { /* giữ số cũ */ } b.note = ''; }
+        else { it.state = 'error'; b.note = ytError(err); }
+      } else it.state = 'queued';
+      finishIfDone(b); dirty = true; pump();
+    });
+  } catch {
+    it.state = 'error'; b.note = 'Không tải được công cụ video, kiểm tra mạng rồi thử lại';
+    finishIfDone(b);
+  } finally { b.starting = false; dirty = true; }
+}
+
 function startDownload(req) {
   // req: {title, pageUrl, items:[{url,type,mime}]}
   const root = settings.saveDir;
   const out = [];
   const imgs = req.items.filter((i) => i.type === 'img');
-  const others = req.items.filter((i) => i.type !== 'img');
+  const videos = req.items.filter((i) => i.type === 'ytdl' || i.type === 'stream');
+  const others = req.items.filter((i) => i.type === 'vid' || i.type === 'file');
   if (imgs.length) {
     const title = cleanName(req.title, 'Trang không tên');
     const dir = uniqueDir(path.join(root, title));
@@ -187,7 +310,7 @@ function startDownload(req) {
       id: nextId++, title: path.basename(dir), dir, isChapter: true, state: 'running', referer: req.pageUrl, ctrl: new Set(),
       items: imgs.map((i, n) => {
         const ext = extOf(i.url, i.mime);
-        return { url: i.url, dest: path.join(dir, String(n + 1).padStart(pad, '0') + ext), needExt: !ext, state: 'queued', got: 0, total: 0 };
+        return { url: i.url, ref: i.ref, dest: path.join(dir, String(n + 1).padStart(pad, '0') + ext), needExt: !ext, state: 'queued', got: 0, total: 0 };
       }),
     });
   }
@@ -201,6 +324,12 @@ function startDownload(req) {
     out.push({ id: nextId++, title: path.basename(dest), dir: root, isChapter: false, state: 'running', referer: req.pageUrl, ctrl: new Set(),
       items: [{ url: i.url, dest, state: 'queued', got: 0, total: 0 }] });
   }
+  for (const i of videos) {
+    fs.mkdirSync(root, { recursive: true });
+    out.push({ id: nextId++, kind: 'ytdl', title: cleanName(req.title, 'Video'), dir: root, isChapter: false, state: 'running', referer: req.pageUrl,
+      ctrl: new Set(), stream: i.type === 'stream', quality: settings.videoQuality,
+      items: [{ url: i.url, dest: root, state: 'queued', got: 0, total: 0 }] });
+  }
   batches.push(...out);
   pushState();
   pump();
@@ -213,14 +342,17 @@ function batchAction({ id, action }) {
   if (action === 'pause' && b.state === 'running') {
     b.state = 'paused';
     for (const c of b.ctrl) c.abort();
+    killProc(b);
   } else if (action === 'resume' && b.state === 'paused') {
     b.state = 'running';
   } else if (action === 'retry' && b.state === 'error') {
     for (const it of b.items) if (it.state === 'error') it.state = 'queued';
+    b.note = '';
     b.state = 'running';
   } else if (action === 'cancel') {
     b.state = 'cancelled';
     for (const c of b.ctrl) c.abort();
+    killProc(b);
     batches.splice(batches.indexOf(b), 1);
     setTimeout(() => {
       for (const it of b.items) if (it.state !== 'done') fs.rm(it.dest + '.part', { force: true }, () => {});
@@ -340,7 +472,7 @@ ipcMain.handle('init', () => {
   let whatsnew = null;
   try { whatsnew = JSON.parse(fs.readFileSync(path.join(__dirname, 'whatsnew.json'), 'utf8')); } catch { /* thiếu file */ }
   setTimeout(() => { send('update', updState); pushState(); }, 0);
-  return { version: app.getVersion(), settings: { saveDir: settings.saveDir, minSize: settings.minSize, hideSmall: settings.hideSmall }, whatsnew };
+  return { version: app.getVersion(), settings: { saveDir: settings.saveDir, minSize: settings.minSize, hideSmall: settings.hideSmall, videoQuality: settings.videoQuality }, whatsnew };
 });
 ipcMain.on('set-page', (_e, url) => { pageUrl = String(url || ''); });
 ipcMain.handle('download', (_e, req) => startDownload(req));
@@ -359,10 +491,23 @@ ipcMain.handle('pick-save-dir', async () => {
 ipcMain.on('set-setting', (_e, { key, value }) => {
   if (key === 'minSize') settings.minSize = Math.max(0, Math.min(4000, Number(value) || 0));
   else if (key === 'hideSmall') settings.hideSmall = !!value;
+  else if (key === 'videoQuality' && ['best', '2160', '1080', '720', '480', 'audio'].includes(value)) settings.videoQuality = value;
   else return;
   saveSettings();
 });
 ipcMain.on('update-action', updateAction);
+ipcMain.on('set-referers', (_e, list) => { if (Array.isArray(list)) for (const [u, r] of list) referers.set(String(u), String(r)); });
+// Đọc mã trang con (dùng phiên đăng nhập của trình duyệt trong app)
+ipcMain.handle('fetch-html', async (_e, { url, referer }) => {
+  try {
+    if (!/^https?:/.test(url)) return { ok: false };
+    if (referer) referers.set(url, referer);
+    const res = await ses.fetch(url);
+    if (!res.ok) return { ok: false, status: res.status };
+    if (!/html|xml|text/i.test(res.headers.get('content-type') || 'text/html')) return { ok: false };
+    return { ok: true, url: res.url || url, text: (await res.text()).slice(0, 4e6) };
+  } catch { return { ok: false }; }
+});
 
 /* ---------- khởi động ---------- */
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -373,6 +518,7 @@ else {
     loadSettings();
     createWindow();
     win.webContents.once('did-finish-load', setupUpdater);
+    setTimeout(updateYtdlp, 8000);
   });
   app.on('window-all-closed', () => app.quit());
 }

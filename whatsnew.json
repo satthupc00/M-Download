@@ -1,15 +1,14 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "date": "2026-11-14",
   "new": [
-    "Trình duyệt ngay trong app, không chèn nút hay icon nào lên trang web",
-    "Tự ghi lại link ảnh, video, file của trang đang xem vào bảng bên phải",
-    "Chỉ tải khi bạn chọn và bấm nút, không tự tải",
-    "Ảnh truyện lưu theo từng chương, đánh số 001, 002… đúng thứ tự đọc",
-    "Lọc theo loại và ẩn ảnh nhỏ (icon, quảng cáo)",
-    "Tạm dừng, tiếp tục, huỷ và tải lại mục bị lỗi",
-    "Tự kiểm tra và cài bản cập nhật mới"
+    "Nút \"Quét trang con\": mở ngầm từng trang ảnh được liên kết từ trang đang xem (kể cả các trang 2, 3… của gallery) để lấy ảnh lớn bên trong",
+    "Bắt và tải video YouTube: mở trang video là có ngay mục \"Video của trang này\" trong danh sách",
+    "Tải được video dạng luồng",
+    "Chọn chất lượng video trong Cài đặt (4K, 1080p, 720p, 480p hoặc chỉ âm thanh)"
   ],
-  "improved": [],
+  "improved": [
+    "Danh sách tự làm mới khi trang đổi nội dung mà không tải lại"
+  ],
   "fixed": []
 }

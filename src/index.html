@@ -59,6 +59,7 @@
         <button class="chip" data-t="vid">Video</button>
         <button class="chip" data-t="file">File</button>
         <button class="chip" id="hideSmall" title="Bỏ qua icon, quảng cáo, ảnh nhỏ">Ẩn ảnh nhỏ</button>
+        <button class="chip deep" id="deep" title="Mở ngầm từng trang ảnh được liên kết từ trang này (kể cả các trang 2, 3… của gallery) để lấy ảnh lớn bên trong"><svg viewBox="0 0 24 24"><path d="M4 5h7v6H4zM15 13h5v6h-5z"/><path d="M11 8h4a2 2 0 0 1 2 2v3"/></svg><span id="deepText">Quét trang con</span></button>
       </div>
       <div class="row">
         <label><input type="checkbox" id="all"> Chọn tất cả</label><span class="sp"></span>
@@ -106,6 +107,19 @@
     <div class="group">
       <h3>Ảnh nhỏ</h3>
       <div class="line"><span>Coi là ảnh nhỏ khi cạnh ngắn dưới</span><input type="number" id="sMin" min="0" max="4000" step="50"><span>px</span></div>
+    </div>
+    <div class="group">
+      <h3>Video</h3>
+      <div class="line"><span>Chất lượng khi tải video</span><span class="sp"></span>
+        <select id="sQuality">
+          <option value="best">Cao nhất có thể</option>
+          <option value="2160">Tối đa 4K</option>
+          <option value="1080">Tối đa 1080p</option>
+          <option value="720">Tối đa 720p</option>
+          <option value="480">Tối đa 480p</option>
+          <option value="audio">Chỉ lấy âm thanh</option>
+        </select></div>
+      <p class="hint">Dùng cho YouTube và video dạng luồng. Lần đầu tải video, app sẽ tự tải thêm công cụ cần thiết.</p>
     </div>
     <div class="group">
       <h3>Phiên bản</h3>

@@ -69,6 +69,9 @@ kbd{display:inline-block;min-width:22px;text-align:center;padding:1px 6px;margin
 .filters{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
 .chip{border:1px solid var(--line);background:none;border-radius:20px;padding:3px 10px;font-size:12px;color:var(--muted)}
 .chip:hover{border-color:var(--red);transform:translateY(-1px)}
+.chip.deep{display:inline-flex;align-items:center;gap:5px;color:var(--text)}
+.chip.deep svg{width:13px;height:13px}
+.chip.deep.busy{border-color:var(--warn);color:var(--warn)}
 .chip.on{background:var(--selected-bg);border-color:var(--red);color:var(--text)}
 .row{display:flex;align-items:center;gap:8px;padding:6px 12px;min-height:44px;color:var(--muted);font-size:12px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
 .row label{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text)}
@@ -89,7 +92,7 @@ input[type=checkbox]:disabled{opacity:.35;cursor:default}
 .item.off{opacity:.55;cursor:default!important}
 .thumb{width:44px;height:44px;border-radius:5px;flex:0 0 auto;display:grid;place-items:center;color:#fffc;background:#3b4050;font-size:11px;font-weight:700;overflow:hidden}
 .thumb img{width:100%;height:100%;object-fit:cover;display:block}
-.thumb.vid{background:#4a3b6b}.thumb.file{background:#2f5a5a}.thumb.stream{background:#5a4a2f}.thumb.ch{background:#3b4a6b}
+.thumb.vid,.thumb.ytdl{background:#4a3b6b}.thumb.file{background:#2f5a5a}.thumb.stream{background:#5a4a2f}.thumb.ch{background:#3b4a6b}
 .meta{min-width:0;flex:1}
 .meta b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .meta span{display:block;color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -137,6 +140,9 @@ input[type=checkbox]:disabled{opacity:.35;cursor:default}
 .line .path{flex:1}
 .hint{color:var(--muted);font-size:12px;margin:8px 0}
 .hint:empty{display:none}
+select{height:32px;padding:0 8px;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--text);outline:0;font:inherit;transition:border-color var(--t-fast) ease,box-shadow var(--t-med) var(--ease-out)}
+select:hover{border-color:#5A5F69}
+select:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(229,56,59,.18)}
 input[type=number]{width:84px;height:32px;padding:0 8px;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--text);outline:0}
 input[type=number]:hover{border-color:#5A5F69}
 input[type=number]:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(229,56,59,.18)}

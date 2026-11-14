@@ -10,6 +10,7 @@ const state = {
   type: 'all',
   hideSmall: true,
   minSize: 300,
+  videoQuality: '1080',
   saveDir: '',
   title: '',
   pageKey: '',
@@ -53,6 +54,7 @@ function toast(text, action, ms = 3500) {
 }
 
 /* ---------- trình duyệt ---------- */
+const VIDEO_PAGE = /^https?:\/\/((www|m|music)\.)?youtube\.com\/(watch\?|shorts\/|live\/)|^https?:\/\/youtu\.be\/./i;
 function normalize(text) {
   text = text.trim();
   if (!text) return '';
@@ -83,14 +85,18 @@ function onNavigate(url, inPage) {
   if (document.activeElement !== $('#addr')) $('#addr').value = url;
   api.setPage(url);
   const key = url.split('#')[0];
-  if (!inPage && key !== state.pageKey) clearCaptured();
+  if (key !== state.pageKey) { stopDeep(); clearCaptured(); }
   state.pageKey = key;
+  if (VIDEO_PAGE.test(url)) addItem({ url, type: 'ytdl', dom: -1, name: state.title || 'Video của trang này' });
   navState();
 }
 view.addEventListener('dom-ready', () => { state.ready = true; navState(); });
 view.addEventListener('did-navigate', (e) => onNavigate(e.url, false));
 view.addEventListener('did-navigate-in-page', (e) => { if (e.isMainFrame) onNavigate(e.url, true); });
-view.addEventListener('page-title-updated', (e) => { state.title = e.title; });
+view.addEventListener('page-title-updated', (e) => {
+  state.title = e.title;
+  for (const it of state.items.values()) if (it.type === 'ytdl') { it.name = e.title; queueRender(); }
+});
 view.addEventListener('did-start-loading', () => { $('#loadbar').classList.add('on'); });
 view.addEventListener('did-stop-loading', () => { $('#loadbar').classList.remove('on'); navState(); scan(); });
 view.addEventListener('did-fail-load', (e) => {
@@ -155,6 +161,7 @@ function addItem(it) {
   if (it.w && it.h) { cur.w = it.w; cur.h = it.h; }
   if (it.dom !== undefined) cur.dom = it.dom;
   if (it.name) cur.name = it.name;
+  if (it.ref) cur.ref = it.ref;
   if (it.type === 'stream' || (cur.type === 'img' && it.type !== 'img')) cur.type = it.type;
   if (it.wanted) {
     state.sel.add(cur.url);
@@ -176,12 +183,14 @@ function isSmall(it) {
 function shown() {
   const t = state.type;
   return [...state.items.values()]
-    .filter((d) => (t === 'all' || d.type === t || (t === 'vid' && d.type === 'stream')) && !(state.hideSmall && isSmall(d)))
+    .filter((d) => (t === 'all' || d.type === t || (t === 'vid' && (d.type === 'stream' || d.type === 'ytdl'))) && !(state.hideSmall && isSmall(d)))
     .sort((a, b) => (a.dom ?? 1e9) - (b.dom ?? 1e9) || a.seq - b.seq);
 }
-const LABEL = { vid: 'VIDEO', file: 'FILE', stream: 'LUỒNG', img: 'ẢNH' };
+const LABEL = { vid: 'VIDEO', file: 'FILE', stream: 'LUỒNG', img: 'ẢNH', ytdl: 'VIDEO' };
+const QUALITY = { best: 'cao nhất', 2160: 'tối đa 4K', 1080: 'tối đa 1080p', 720: 'tối đa 720p', 480: 'tối đa 480p', audio: 'chỉ âm thanh' };
 function info(it) {
-  if (it.type === 'stream') return 'Video dạng luồng · chưa hỗ trợ tải';
+  if (it.type === 'stream') return 'Video dạng luồng · ' + QUALITY[state.videoQuality];
+  if (it.type === 'ytdl') return 'Video của trang này · ' + QUALITY[state.videoQuality];
   const parts = [];
   if (it.w && it.h) parts.push(`${it.w}×${it.h}`);
   else if (it.type !== 'img') parts.push((/\.([a-z0-9]{2,5})$/i.exec(it.name) || [, LABEL[it.type]])[1].toUpperCase());
@@ -207,8 +216,8 @@ function makeEl(it) {
 }
 function toggle(url, range) {
   const it = state.items.get(url);
-  if (!it || it.type === 'stream') return;
-  const list = shown().filter((d) => d.type !== 'stream').map((d) => d.url);
+  if (!it) return;
+  const list = shown().map((d) => d.url);
   const on = !state.sel.has(url);
   const a = list.indexOf(state.lastClick), b = list.indexOf(url);
   if (range && a >= 0 && b >= 0) for (let i = Math.min(a, b); i <= Math.max(a, b); i++) on ? state.sel.add(list[i]) : state.sel.delete(list[i]);
@@ -230,9 +239,8 @@ function render() {
     if (!el) { el = makeEl(it); els.set(it.url, el); }
     const on = state.sel.has(it.url);
     el.classList.toggle('sel', on);
-    el.classList.toggle('off', it.type === 'stream');
     const cb = el.firstChild;
-    cb.checked = on; cb.disabled = it.type === 'stream';
+    cb.checked = on;
     const th = el.children[1];
     if (!th.classList.contains(it.type)) { th.className = 'thumb ' + it.type; if (it.type !== 'img') th.textContent = LABEL[it.type]; }
     const [b, s] = el.querySelectorAll('.meta > *');
@@ -243,7 +251,7 @@ function render() {
     if (el !== want) list.insertBefore(el, want);
     prev = el;
   }
-  const pick = v.filter((d) => d.type !== 'stream');
+  const pick = v;
   const n = pick.filter((d) => state.sel.has(d.url)).length;
   $('#nCap').textContent = v.length;
   $('#selInfo').textContent = 'Đã chọn ' + n;
@@ -256,7 +264,7 @@ function render() {
   ink();
 }
 $('#all').onchange = (e) => {
-  shown().forEach((d) => { if (d.type === 'stream') return; e.target.checked ? state.sel.add(d.url) : state.sel.delete(d.url); });
+  shown().forEach((d) => { e.target.checked ? state.sel.add(d.url) : state.sel.delete(d.url); });
   render();
 };
 $$('#chips .chip[data-t]').forEach((c) => c.onclick = () => {
@@ -271,8 +279,8 @@ $('#hideSmall').onclick = () => { state.hideSmall = !state.hideSmall; api.setSet
 $('#clearCap').onclick = clearCaptured;
 
 $('#dl').onclick = async () => {
-  const items = shown().filter((d) => d.type !== 'stream' && state.sel.has(d.url))
-    .map((d) => ({ url: d.url, type: d.type, mime: d.mime, name: d.type === 'img' ? '' : d.name }));
+  const items = shown().filter((d) => state.sel.has(d.url))
+    .map((d) => ({ url: d.url, type: d.type, mime: d.mime, ref: d.ref, name: d.type === 'img' ? '' : d.name }));
   if (!items.length) return;
   const page = view.hidden ? '' : view.getURL();
   await api.download({ title: state.title || fileName(page), pageUrl: page, items });
@@ -281,6 +289,138 @@ $('#dl').onclick = async () => {
   showTab('run');
   toast(`Bắt đầu tải ${items.length} mục`);
 };
+
+/* ---------- quét trang con (cấp 2, 3): mở ngầm từng trang ảnh để lấy ảnh lớn ---------- */
+const deep = { run: 0, busy: false };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const IMG_EXT = /\.(jpe?g|png|webp|gif|avif|bmp)$/i;
+const LAZY = ['data-src', 'data-original', 'data-lazy-src', 'data-lazy', 'data-url', 'data-cdn', 'data-echo'];
+function absUrl(u, base) { try { const x = new URL(u, base); x.hash = ''; return /^https?:$/.test(x.protocol) ? x.href : ''; } catch { return ''; } }
+// Link bọc ảnh thu nhỏ trong một trang -> danh sách trang con theo đúng thứ tự
+function thumbLinks(doc, base) {
+  const host = new URL(base).hostname, self = absUrl(base, base);
+  const out = [], seen = new Set();
+  doc.querySelectorAll('a[href]').forEach((a) => {
+    if (!a.querySelector('img, [style*="url("]')) return;
+    const u = absUrl(a.getAttribute('href'), base);
+    if (!u || u === self || seen.has(u) || new URL(u).hostname !== host) return;
+    seen.add(u); out.push(u);
+  });
+  return out;
+}
+// giữ nhóm link cùng kiểu đông nhất (bỏ logo, banner, link lẻ)
+function mainGroup(out) {
+  const kind = (u) => { const p = new URL(u).pathname.split('/').filter(Boolean); return IMG_EXT.test(u) ? 'img' : p.length + ':' + (p[0] || ''); };
+  const groups = new Map();
+  out.forEach((u) => groups.set(kind(u), (groups.get(kind(u)) || 0) + 1));
+  const best = [...groups].sort((a, b) => b[1] - a[1])[0];
+  return best && best[1] >= 3 ? out.filter((u) => kind(u) === best[0]) : out;
+}
+// Các trang 2, 3… của cùng một gallery
+function pageLinks(doc, base) {
+  const b = new URL(base), found = new Map();
+  doc.querySelectorAll('a[href]').forEach((a) => {
+    let u; try { u = new URL(a.getAttribute('href'), base); } catch { return; }
+    if (u.origin !== b.origin || u.pathname !== b.pathname) return;
+    for (const k of ['p', 'page', 'pg', 'trang']) {
+      const n = u.searchParams.get(k);
+      if (n && /^\d+$/.test(n)) { const f = found.get(k) || { max: 0, zero: false }; f.max = Math.max(f.max, +n); f.zero = f.zero || +n === 0; found.set(k, f); }
+    }
+  });
+  const out = [];
+  for (const [k, f] of found) {
+    const cur = b.searchParams.get(k);
+    if (cur) { const u = new URL(base); u.hash = ''; u.searchParams.delete(k); out.push({ n: -1, url: u.href }); }   // trang đầu (không có số trang)
+    for (let n = f.zero ? 0 : 1; n <= Math.min(f.max, 80); n++) {
+      if (String(n) === cur) continue;
+      const u = new URL(base); u.hash = ''; u.searchParams.set(k, n); out.push({ n, url: u.href });
+    }
+    break;
+  }
+  return out;
+}
+// Ảnh chính của một trang con
+function mainImage(doc, base) {
+  let best = null;
+  doc.querySelectorAll('img').forEach((img, i) => {
+    let src = '';
+    for (const a of LAZY) { const v = img.getAttribute(a); if (v && !v.startsWith('data:')) { src = v.trim(); break; } }
+    src = absUrl(src || img.getAttribute('src') || '', base);
+    if (!src) return;
+    const style = img.getAttribute('style') || '';
+    const w = parseInt(img.getAttribute('width') || (/width:\s*(\d+)px/.exec(style) || [])[1] || 0, 10) || 0;
+    const h = parseInt(img.getAttribute('height') || (/height:\s*(\d+)px/.exec(style) || [])[1] || 0, 10) || 0;
+    let score = (w * h) / 1000 - i * 0.01;
+    if (/(^|[-_ ])(img|image|pic|page|comic|manga|chapter|main|content|full|reader)/i.test((img.id || '') + ' ' + (img.className || ''))) score += 1000;
+    if (/logo|icon|avatar|banner|sprite|button|thumb|\/ads?[\/_.-]|\.svg(\?|$)/i.test(src)) score -= 2000;
+    if (w && h && Math.min(w, h) < 200) score -= 2000;
+    if (!best || score > best.score) best = { url: src, w, h, score };
+  });
+  return best && best.score > -1000 ? best : null;
+}
+function setDeepUi(text) {
+  $('#deep').classList.toggle('busy', deep.busy);
+  $('#deepText').textContent = deep.busy ? text : 'Quét trang con';
+}
+function stopDeep() { deep.run++; deep.busy = false; setDeepUi(); }
+async function startDeep() {
+  if (!state.ready || view.hidden) { toast('Hãy mở một trang web trước'); return; }
+  const run = ++deep.run, base = view.getURL(), parser = new DOMParser();
+  const alive = () => run === deep.run;
+  deep.busy = true; setDeepUi('Đang đọc trang…');
+  try {
+    const html = await view.executeJavaScript('document.documentElement.outerHTML');
+    const doc = parser.parseFromString(html, 'text/html');
+    let subs = [];
+    const seen = new Set();
+    const take = (d, b) => thumbLinks(d, b).forEach((u) => { if (!seen.has(u) && subs.length < 3000) { seen.add(u); subs.push(u); } });
+    const pages = pageLinks(doc, base);
+    const curN = (() => { for (const k of ['p', 'page', 'pg', 'trang']) { const v = new URL(base).searchParams.get(k); if (v) return +v; } return -1; })();
+    // gom link theo đúng thứ tự trang: các trang trước, trang hiện tại, các trang sau
+    const before = pages.filter((p) => curN >= 0 && p.n < curN), after = pages.filter((p) => !(curN >= 0 && p.n < curN));
+    const readPages = async (list) => {
+      for (const p of list) {
+        if (!alive()) return;
+        setDeepUi('Dừng · đang đọc các trang của gallery');
+        const r = await api.fetchHtml(p.url, base);
+        if (r.ok) take(parser.parseFromString(r.text, 'text/html'), r.url);
+        await sleep(350);
+      }
+    };
+    await readPages(before);
+    take(doc, base);
+    await readPages(after);
+    if (!alive()) return;
+    subs = mainGroup(subs);
+    if (!subs.length) { toast('Không thấy trang con nào có ảnh thu nhỏ ở trang này'); return; }
+
+    const count = new Map();   // ảnh xuất hiện ở nhiều trang con = ảnh giao diện, bỏ
+    let done = 0, found = 0, failed = 0, next = 0;
+    const worker = async () => {
+      while (alive() && next < subs.length) {
+        const idx = next++, u = subs[idx];
+        if (IMG_EXT.test(new URL(u).pathname)) { addItem({ url: u, type: 'img', dom: 100000 + idx, ref: base }); found++; }
+        else {
+          const r = await api.fetchHtml(u, base);
+          if (!alive()) return;
+          const m = r.ok ? mainImage(parser.parseFromString(r.text, 'text/html'), r.url) : null;
+          if (m) {
+            const c = (count.get(m.url) || 0) + 1; count.set(m.url, c);
+            if (c === 1) { api.setReferers([[m.url, r.url]]); addItem({ url: m.url, type: 'img', w: m.w, h: m.h, dom: 100000 + idx, ref: r.url }); found++; }
+            else if (c === 2) { state.items.delete(m.url); state.sel.delete(m.url); found--; queueRender(); }
+          } else failed++;
+          await sleep(300);
+        }
+        done++;
+        setDeepUi(`Dừng · ${done}/${subs.length} trang`);
+      }
+    };
+    await Promise.all([worker(), worker()]);
+    if (alive()) toast(`Quét xong: lấy được ${found} ảnh từ ${subs.length} trang con` + (failed ? `, ${failed} trang không đọc được` : ''));
+  } catch { if (alive()) toast('Không quét được trang này'); }
+  finally { if (alive()) { deep.busy = false; setDeepUi(); } }
+}
+$('#deep').onclick = () => { if (deep.busy) { stopDeep(); toast('Đã dừng quét'); } else startDeep(); };
 
 /* ---------- đang tải / đã xong ---------- */
 const ICON = {
@@ -299,6 +439,7 @@ function runText(b) {
   const multi = b.count > 1;
   const prog = multi ? `${b.done}/${b.count} ảnh · ${fmtSize(b.got) || '0 B'}`
     : (b.total ? `${fmtSize(b.got) || '0 B'} / ${fmtSize(b.total)}` : fmtSize(b.got) || 'Đang kết nối…');
+  if (b.note && (b.state === 'error' || b.state === 'running')) return [b.state === 'error' ? 'err' : '', b.note];
   if (b.state === 'paused') return ['warn', 'Tạm dừng · ' + prog];
   if (b.state === 'error') return ['err', multi ? `Lỗi ${b.failed} ảnh · đã xong ${b.done}/${b.count}` : 'Tải lỗi · bấm để thử lại'];
   return ['', prog + (b.speed ? ` · ${fmtSize(b.speed)}/s` : '') + (multi ? '' : eta(b))];
@@ -315,7 +456,6 @@ function renderDownloads({ active, done }) {
       el.className = 'item';
       el.innerHTML = `<div class="thumb ${b.isChapter ? 'ch' : 'file'}"></div><div class="meta"><b></b><span></span><div class="bar"><u></u></div></div>
         <button class="ibtn" data-a="main"></button><button class="ibtn" data-a="cancel" title="Huỷ" aria-label="Huỷ">${ICON.x}</button>`;
-      el.querySelector('b').textContent = b.title;
       el.title = b.file;
       el.querySelector('[data-a=cancel]').onclick = () => api.batchAction(b.id, 'cancel');
       el.querySelector('[data-a=main]').onclick = () => api.batchAction(b.id, el.dataset.act);
@@ -323,6 +463,7 @@ function renderDownloads({ active, done }) {
       list.appendChild(el);
     }
     el.querySelector('.thumb').textContent = b.isChapter ? b.count : (/\.([a-z0-9]{2,4})$/i.exec(b.title) || [, 'FILE'])[1].toUpperCase();
+    el.querySelector('b').textContent = b.title;
     const [cls, text] = runText(b);
     const s = el.querySelector('.meta span');
     s.className = cls; s.textContent = text;
@@ -403,6 +544,7 @@ $('#sMin').onchange = (e) => {
   e.target.value = state.minSize;
   api.setSetting('minSize', state.minSize); syncSmall(); render();
 };
+$('#sQuality').onchange = (e) => { state.videoQuality = e.target.value; api.setSetting('videoQuality', state.videoQuality); render(); };
 function fmtDate(d) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; }
 function showWhatsNew() {
   const w = state.whatsnew || { version: state.version };
@@ -475,6 +617,8 @@ api.onShortcut((s) => {
   state.saveDir = r.settings.saveDir; state.minSize = r.settings.minSize; state.hideSmall = r.settings.hideSmall;
   $('#sVer').textContent = 'M-Download v' + r.version;
   $('#sMin').value = state.minSize;
+  state.videoQuality = r.settings.videoQuality || '1080';
+  $('#sQuality').value = state.videoQuality;
   syncDir(); syncSmall(); render();
   $('#addr').focus();
 })();

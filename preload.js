@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('api', {
   openSaveDir: () => ipcRenderer.send('open-save-dir'),
   pickSaveDir: () => ipcRenderer.invoke('pick-save-dir'),
   setSetting: (key, value) => ipcRenderer.send('set-setting', { key, value }),
+  setReferers: (list) => ipcRenderer.send('set-referers', list),
+  fetchHtml: (url, referer) => ipcRenderer.invoke('fetch-html', { url, referer }),
   updateAction: () => ipcRenderer.send('update-action'),
   onCaptured: on('captured'),
   onDownloads: on('downloads'),
