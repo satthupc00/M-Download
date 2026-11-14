@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0",
+  "date": "2026-11-14",
+  "new": [
+    "Trình duyệt ngay trong app, không chèn nút hay icon nào lên trang web",
+    "Tự ghi lại link ảnh, video, file của trang đang xem vào bảng bên phải",
+    "Chỉ tải khi bạn chọn và bấm nút, không tự tải",
+    "Ảnh truyện lưu theo từng chương, đánh số 001, 002… đúng thứ tự đọc",
+    "Lọc theo loại và ẩn ảnh nhỏ (icon, quảng cáo)",
+    "Tạm dừng, tiếp tục, huỷ và tải lại mục bị lỗi",
+    "Tự kiểm tra và cài bản cập nhật mới"
+  ],
+  "improved": [],
+  "fixed": []
+}

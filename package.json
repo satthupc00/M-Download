@@ -1,0 +1,48 @@
+{
+  "name": "m-download",
+  "productName": "M-Download",
+  "version": "1.0.0",
+  "description": "Bắt link và tải ảnh, video, file từ trang web",
+  "author": "Mondiro",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never",
+    "release": "electron-builder --win --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  },
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.mondiro.mdownload",
+    "productName": "M-Download",
+    "files": [
+      "main.js",
+      "preload.js",
+      "whatsnew.json",
+      "src/**/*",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "M-Download-Setup-${version}.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "satthupc00",
+      "repo": "M-Download",
+      "releaseType": "release"
+    }
+  }
+}

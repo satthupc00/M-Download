@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src * data: blob:; style-src 'self' 'unsafe-inline'">
+<title>M-Download</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <img class="brand-icon" src="../build/icon.png" alt="">
+    <div class="brand-name"><span><span class="m">M</span><span class="a">-Download</span></span><span class="latest" id="latest" hidden>latest</span></div>
+  </div>
+  <div class="nav">
+    <button class="ibtn" id="back" title="Quay lại (Alt+←)" aria-label="Quay lại" disabled><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <button class="ibtn" id="fwd" title="Tiến tới (Alt+→)" aria-label="Tiến tới" disabled><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+    <button class="ibtn" id="reload" title="Tải lại trang (F5)" aria-label="Tải lại trang"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+  </div>
+  <form class="addr" id="addrForm">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+    <input id="addr" spellcheck="false" autocomplete="off" placeholder="Nhập hoặc dán địa chỉ trang web rồi nhấn Enter" aria-label="Địa chỉ trang web" title="Địa chỉ trang web (Ctrl+L)">
+  </form>
+  <div class="tools">
+    <button class="ibtn" id="openDir" title="Mở thư mục tải về (Ctrl+J)" aria-label="Mở thư mục tải về"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+    <button class="ibtn" id="settingsBtn" title="Cài đặt" aria-label="Cài đặt"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.3l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2.3-1.3L14 3h-4l-.3 2.5a7 7 0 0 0-2.3 1.3l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.6l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2.3 1.3L10 21h4l.3-2.5a7 7 0 0 0 2.3-1.3l2.3 1 2-3.4-2-1.5A7 7 0 0 0 19 12z"/></svg></button>
+    <button class="ibtn upd" id="updBtn" title="Kiểm tra cập nhật" aria-label="Kiểm tra cập nhật"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg></button>
+  </div>
+  <div class="loadbar" id="loadbar"></div>
+</header>
+
+<div class="body">
+  <main class="stage">
+    <div class="start" id="start">
+      <h1>Mở một trang web để bắt link</h1>
+      <p>Dán địa chỉ trang truyện, trang có video hoặc file vào ô phía trên. Ảnh, video và file của trang sẽ hiện ở bảng bên phải, bạn chọn rồi mới tải.</p>
+      <ul class="keys">
+        <li><kbd>Ctrl</kbd><kbd>L</kbd> Nhập địa chỉ</li>
+        <li><kbd>F5</kbd> Tải lại trang</li>
+        <li><kbd>Alt</kbd><kbd>←</kbd> Quay lại</li>
+        <li><kbd>Ctrl</kbd><kbd>J</kbd> Mở thư mục tải về</li>
+      </ul>
+    </div>
+    <webview id="view" partition="persist:browse" allowpopups hidden></webview>
+  </main>
+
+  <aside class="side">
+    <div class="tabs" id="tabs">
+      <button class="tab on" data-p="cap">Bắt được<i id="nCap">0</i></button>
+      <button class="tab" data-p="run">Đang tải<i id="nRun">0</i></button>
+      <button class="tab" data-p="fin">Đã xong<i id="nFin">0</i></button>
+      <span class="ink" id="ink"></span>
+    </div>
+
+    <section class="pane on" id="cap">
+      <div class="filters" id="chips">
+        <button class="chip on" data-t="all">Tất cả</button>
+        <button class="chip" data-t="img">Ảnh</button>
+        <button class="chip" data-t="vid">Video</button>
+        <button class="chip" data-t="file">File</button>
+        <button class="chip" id="hideSmall" title="Bỏ qua icon, quảng cáo, ảnh nhỏ">Ẩn ảnh nhỏ</button>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="all"> Chọn tất cả</label><span class="sp"></span>
+        <span id="selInfo">Đã chọn 0</span>
+        <button class="ibtn" id="clearCap" title="Xoá danh sách đã bắt" aria-label="Xoá danh sách đã bắt"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+      </div>
+      <div class="list" id="list"></div>
+      <div class="empty" id="capEmpty">Chưa bắt được link nào.<br>Mở một trang web, cuộn hết trang để ảnh hiện đủ.</div>
+      <div class="act">
+        <button class="primary" id="dl" disabled title="Tải các mục đã chọn"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg><span id="dlText">Tải mục đã chọn</span></button>
+        <button class="second" id="pickDir" title="Chọn thư mục lưu"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Lưu vào…</button>
+      </div>
+    </section>
+
+    <section class="pane" id="run">
+      <div class="list" id="runList"></div>
+      <div class="empty" id="runEmpty">Không có mục nào đang tải.</div>
+    </section>
+
+    <section class="pane" id="fin">
+      <div class="row"><span class="sp"></span><button class="textbtn" id="clearDone" title="Chỉ xoá danh sách, không xoá file đã tải">Xoá danh sách</button></div>
+      <div class="list" id="finList"></div>
+      <div class="empty" id="finEmpty">Chưa tải xong mục nào.</div>
+    </section>
+  </aside>
+</div>
+
+<footer class="foot">
+  <span id="fInfo">Chưa mở trang nào</span>
+  <button class="textbtn path" id="fDir" title="Mở thư mục tải về"></button>
+  <span class="sp"></span>
+  <span class="credit">Created by Mondiro</span>
+</footer>
+
+<div class="toasts" id="toasts"></div>
+
+<div class="modal" id="settings" hidden>
+  <div class="dialog" role="dialog" aria-label="Cài đặt">
+    <div class="dhead"><b>Cài đặt</b><button class="ibtn" data-close title="Đóng (Esc)" aria-label="Đóng"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="group">
+      <h3>Thư mục lưu</h3>
+      <div class="line"><span class="path" id="sDir"></span><button class="second" id="sPick">Đổi…</button></div>
+      <p class="hint">Ảnh truyện lưu vào thư mục riêng theo tên trang, đánh số 001, 002… Video và file lưu thẳng vào thư mục này.</p>
+    </div>
+    <div class="group">
+      <h3>Ảnh nhỏ</h3>
+      <div class="line"><span>Coi là ảnh nhỏ khi cạnh ngắn dưới</span><input type="number" id="sMin" min="0" max="4000" step="50"><span>px</span></div>
+    </div>
+    <div class="group">
+      <h3>Phiên bản</h3>
+      <div class="line"><span id="sVer"></span><span class="sp"></span>
+        <button class="second" id="sNew"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15v4M17 17h4"/></svg>What's new</button>
+        <button class="second" id="sUpd">Kiểm tra cập nhật</button></div>
+      <p class="hint" id="sUpdInfo"></p>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="whatsnew" hidden>
+  <div class="dialog" role="dialog" aria-label="What's new">
+    <div class="dhead"><b>What's new</b><span class="ver" id="wVer"></span><span class="sp"></span><button class="ibtn" data-close title="Đóng (Esc)" aria-label="Đóng"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div id="wBody"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
