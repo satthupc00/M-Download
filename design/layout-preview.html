@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M-Download</title>
+<style>
+:root{
+  --chrome:#1F2126;--panel:#26292F;--line:#363A42;--hover:#2F333A;--stage:#2B2D31;
+  --text:#E8E9EC;--muted:#8D929C;--red:#E5383B;--warn:#F2B84B;--selected-bg:#3A2426;--green:#2EB872;
+  --ease-out:cubic-bezier(.22,1,.36,1);--ease-spring:cubic-bezier(.34,1.56,.64,1);--t-fast:.12s;--t-med:.22s;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--chrome);color:var(--text);
+  font:13px/1.4 "Segoe UI",system-ui,sans-serif;overflow:hidden;user-select:none}
+body{display:flex;flex-direction:column}
+:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+button,input,.chip,.item{font:inherit;color:inherit;
+  transition:background-color var(--t-fast) ease,border-color var(--t-fast) ease,color var(--t-fast) ease,
+  box-shadow var(--t-med) var(--ease-out),transform var(--t-med) var(--ease-out),opacity var(--t-fast) ease}
+button{cursor:pointer}
+button:not(:disabled):active{transform:scale(.95);transition-duration:.06s}
+svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+
+/* header */
+.top{display:flex;align-items:center;gap:12px;padding:10px 150px 10px 14px;min-height:58px;border-bottom:1px solid var(--line);flex:0 0 auto;position:relative}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-icon{width:34px;height:34px;border-radius:8px;border:1.5px dashed #5A5F69;display:grid;place-items:center;color:var(--muted);font-size:9px}
+.brand-name{font-size:17px;font-weight:700;line-height:34px;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.brand-name .m{color:var(--red)}.brand-name .a{color:#fff}
+.latest{font-size:10.5px;font-weight:800;color:var(--green);background:#2eb87224;padding:1px 7px;border-radius:20px;line-height:16px}
+.ibtn{width:32px;height:32px;border:1px solid transparent;background:none;border-radius:6px;display:grid;place-items:center;color:var(--muted)}
+.ibtn:hover{border-color:var(--red);color:var(--text);transform:translateY(-1px)}
+.ibtn.ok{color:var(--green)}
+.nav{display:flex;gap:2px}
+.addr{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:34px;padding:0 12px;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--muted)}
+.addr:focus-within{border-color:var(--red);box-shadow:0 0 0 3px rgba(229,56,59,.18)}
+.addr input{flex:1;min-width:0;border:0;outline:0;background:none;color:var(--text);user-select:text}
+.tools{display:flex;gap:4px}
+.winbtns{position:absolute;right:0;top:0;height:58px;display:flex}
+.winbtns span{width:46px;display:grid;place-items:center;color:#fff;font-size:12px;opacity:.85}
+
+/* body */
+.body{flex:1;min-height:0;display:flex}
+.stage{flex:1;min-width:0;background:var(--stage);overflow:auto;padding:22px}
+.page{max-width:560px;margin:0 auto;background:#17181B;border-radius:8px;padding:18px}
+.page h2{margin:0 0 4px;font-size:16px}
+.page p{margin:0 0 14px;color:var(--muted);font-size:12px}
+.comic{height:230px;border-radius:4px;margin-bottom:10px;display:grid;place-items:center;color:#ffffff55;font-weight:700;font-size:12px}
+.note{position:sticky;bottom:0;margin:14px auto 0;max-width:560px;font-size:12px;color:var(--muted);text-align:center;
+  background:#1F2126e6;border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+.note b{color:var(--text)}
+
+/* side panel */
+.side{width:380px;flex:0 0 auto;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex;position:relative;border-bottom:1px solid var(--line);padding:0 8px}
+.tab{background:none;border:0;padding:11px 12px;color:var(--muted);font-weight:600}
+.tab:hover,.tab.on{color:var(--text)}
+.tab i{font-style:normal;font-size:11px;color:var(--muted);margin-left:4px;font-variant-numeric:tabular-nums}
+.ink{position:absolute;bottom:-1px;height:2px;background:var(--red);transition:left var(--t-med) var(--ease-out),width var(--t-med) var(--ease-out)}
+.filters{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.chip{border:1px solid var(--line);background:none;border-radius:20px;padding:3px 10px;font-size:12px;color:var(--muted)}
+.chip:hover{border-color:var(--red);transform:translateY(-1px)}
+.chip.on{background:var(--selected-bg);border-color:var(--red);color:var(--text)}
+.row{display:flex;align-items:center;gap:8px;padding:8px 12px;color:var(--muted);font-size:12px;border-bottom:1px solid var(--line)}
+.row label{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text)}
+.row .sp{flex:1}
+input[type=checkbox]{appearance:none;width:16px;height:16px;margin:0;border:1.5px solid #5A5F69;border-radius:4px;background:var(--panel);display:inline-grid;place-content:center;cursor:pointer;flex:0 0 auto}
+input[type=checkbox]::after{content:'';width:9px;height:5px;border:2px solid #fff;border-top:0;border-right:0;transform:translateY(-1px) rotate(-45deg) scale(0);transition:transform var(--t-med) var(--ease-spring)}
+input[type=checkbox]:hover{border-color:var(--red)}
+input[type=checkbox]:checked{background:var(--red);border-color:var(--red)}
+input[type=checkbox]:checked::after{transform:translateY(-1px) rotate(-45deg) scale(1)}
+.list{flex:1;min-height:0;overflow:auto;padding:6px}
+.item{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer}
+.item:hover{background:var(--hover);transform:translateX(3px);box-shadow:inset 3px 0 0 var(--red)}
+.item.sel{background:var(--selected-bg);box-shadow:inset 3px 0 0 var(--red)}
+.thumb{width:44px;height:44px;border-radius:5px;flex:0 0 auto;display:grid;place-items:center;color:#fff9}
+.meta{min-width:0;flex:1}
+.meta b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta span{color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums}
+.bar{height:4px;border-radius:4px;background:#474C55;margin-top:5px;overflow:hidden}
+.bar u{display:block;height:100%;background:var(--red)}
+.done{color:var(--green)}
+.act{padding:10px 12px;border-top:1px solid var(--line);display:flex;gap:8px}
+.primary{flex:1;height:36px;border:0;border-radius:6px;background:var(--red);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px}
+.primary:hover{background:#F04447;transform:translateY(-1px);box-shadow:0 6px 16px rgba(229,56,59,.35)}
+.primary:disabled{opacity:.45;cursor:default}
+.second{height:36px;padding:0 12px;border:1px solid var(--line);border-radius:6px;background:none;display:flex;align-items:center;gap:6px}
+.second:hover{border-color:var(--red);transform:translateY(-1px)}
+.pane{display:none;flex-direction:column;flex:1;min-height:0}.pane.on{display:flex}
+
+/* footer */
+.foot{display:flex;align-items:center;gap:14px;padding:8px 14px;border-top:1px solid var(--line);color:var(--muted);font-size:12px;flex:0 0 auto}
+.foot .sp{flex:1}
+.credit{color:#6B707A;font-size:11px;white-space:nowrap}
+@media (max-width:820px){.side{width:300px}.nav{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <div class="brand-icon" title="Chỗ đặt logo">logo</div>
+    <div class="brand-name"><span><span class="m">M</span><span class="a">-Download</span></span><span class="latest">latest</span></div>
+  </div>
+  <div class="nav">
+    <button class="ibtn" title="Quay lại (Alt+←)"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <button class="ibtn" title="Tiến tới (Alt+→)"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+    <button class="ibtn" title="Tải lại trang (F5)"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+  </div>
+  <div class="addr">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+    <input value="https://truyen-vi-du.com/one-shot/chuong-12" aria-label="Địa chỉ trang web" title="Nhập hoặc dán địa chỉ (Ctrl+L)">
+  </div>
+  <div class="tools">
+    <button class="ibtn" title="Mở thư mục tải về (Ctrl+J)"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+    <button class="ibtn" title="Cài đặt"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.3l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2.3-1.3L14 3h-4l-.3 2.5a7 7 0 0 0-2.3 1.3l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.6l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2.3 1.3L10 21h4l.3-2.5a7 7 0 0 0 2.3-1.3l2.3 1 2-3.4-2-1.5A7 7 0 0 0 19 12z"/></svg></button>
+    <button class="ibtn ok" title="Kiểm tra cập nhật · Đã là bản mới nhất" aria-label="Kiểm tra cập nhật"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg></button>
+  </div>
+  <div class="winbtns"><span>&#x2014;</span><span>&#x25A1;</span><span>&#x2715;</span></div>
+</header>
+
+<div class="body">
+  <main class="stage">
+    <div class="page">
+      <h2>One Shot · Chương 12</h2>
+      <p>Trang web hiện ở đây như trình duyệt bình thường. Không có nút hay icon nào chèn lên trang.</p>
+      <div class="comic" style="background:linear-gradient(135deg,#3b4a6b,#232a3d)">Trang 1</div>
+      <div class="comic" style="background:linear-gradient(135deg,#6b3b4a,#3d2329)">Trang 2</div>
+      <div class="comic" style="background:linear-gradient(135deg,#3b6b5a,#233d33)">Trang 3</div>
+      <div class="comic" style="background:linear-gradient(135deg,#6b5a3b,#3d3323)">Trang 4</div>
+    </div>
+    <div class="note">App chỉ <b>ghi lại link</b> vào bảng bên phải. <b>Không tự tải</b> cho tới khi bạn bấm nút.</div>
+  </main>
+
+  <aside class="side">
+    <div class="tabs" id="tabs">
+      <button class="tab on" data-p="cap">Bắt được<i id="nCap">8</i></button>
+      <button class="tab" data-p="run">Đang tải<i>2</i></button>
+      <button class="tab" data-p="fin">Đã xong<i>3</i></button>
+      <span class="ink" id="ink"></span>
+    </div>
+
+    <section class="pane on" id="cap">
+      <div class="filters" id="chips">
+        <button class="chip on" data-t="all">Tất cả</button>
+        <button class="chip" data-t="img">Ảnh</button>
+        <button class="chip" data-t="vid">Video</button>
+        <button class="chip" data-t="file">File</button>
+        <button class="chip" id="big" title="Bỏ qua icon, quảng cáo, ảnh nhỏ">Ẩn ảnh nhỏ &lt; 300px</button>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="all"> Chọn tất cả</label><span class="sp"></span>
+        <span id="selInfo">Đã chọn 0</span>
+        <button class="ibtn" title="Xoá danh sách đã bắt"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+      </div>
+      <div class="list" id="list"></div>
+      <div class="act">
+        <button class="primary" id="dl" disabled><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg><span id="dlText">Tải mục đã chọn</span></button>
+        <button class="second" title="Chọn thư mục lưu"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Lưu vào…</button>
+      </div>
+    </section>
+
+    <section class="pane" id="run">
+      <div class="list">
+        <div class="item"><div class="thumb" style="background:#4a3b6b">MP4</div><div class="meta"><b>trailer-tap-3.mp4</b><span>42,1 / 96,4 MB · 3,2 MB/s · còn 17 giây</span><div class="bar"><u style="width:44%"></u></div></div>
+          <button class="ibtn" title="Tạm dừng"><svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></button></div>
+        <div class="item"><div class="thumb" style="background:#3b6b5a">ZIP</div><div class="meta"><b>artbook-vol2.zip</b><span>Đang chờ · 210 MB</span><div class="bar"><u style="width:0"></u></div></div>
+          <button class="ibtn" title="Huỷ"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      </div>
+    </section>
+
+    <section class="pane" id="fin">
+      <div class="list">
+        <div class="item"><div class="thumb" style="background:#3b4a6b">18</div><div class="meta"><b>One Shot · Chương 11</b><span class="done">Xong · 18 ảnh · 24,6 MB</span></div>
+          <button class="ibtn" title="Mở thư mục"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button></div>
+        <div class="item"><div class="thumb" style="background:#6b3b4a">PSD</div><div class="meta"><b>nhan-vat-ref.psd</b><span class="done">Xong · 88,2 MB</span></div>
+          <button class="ibtn" title="Mở thư mục"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button></div>
+        <div class="item"><div class="thumb" style="background:#6b5a3b">JPG</div><div class="meta"><b>bia-tap-5.jpg</b><span class="done">Xong · 1,9 MB</span></div>
+          <button class="ibtn" title="Mở thư mục"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button></div>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<footer class="foot">
+  <span>Đã bắt <b id="fCap">8</b> link ở trang này</span>
+  <span>Lưu vào: Downloads\M-Download</span>
+  <span class="sp"></span>
+  <span class="credit">Created by Mondiro</span>
+</footer>
+
+<script>
+const data=[
+ {t:'img',n:'trang-01.jpg',s:'1200×1800 · 1,4 MB',c:'#3b4a6b',small:0},
+ {t:'img',n:'trang-02.jpg',s:'1200×1800 · 1,3 MB',c:'#6b3b4a',small:0},
+ {t:'img',n:'trang-03.jpg',s:'1200×1800 · 1,5 MB',c:'#3b6b5a',small:0},
+ {t:'img',n:'trang-04.jpg',s:'1200×1800 · 1,2 MB',c:'#6b5a3b',small:0},
+ {t:'img',n:'banner-quang-cao.gif',s:'240×80 · 38 KB',c:'#555a63',small:1},
+ {t:'img',n:'icon-like.png',s:'32×32 · 2 KB',c:'#555a63',small:1},
+ {t:'vid',n:'trailer-tap-4.mp4',s:'1080p · 96,4 MB',c:'#4a3b6b',small:0},
+ {t:'file',n:'artbook-vol3.zip',s:'ZIP · 215 MB',c:'#3b6b6b',small:0},
+];
+const lab={img:'IMG',vid:'MP4',file:'ZIP'};
+let type='all',hideSmall=false;const sel=new Set();
+const $=s=>document.querySelector(s),list=$('#list');
+function shown(){return data.filter(d=>(type==='all'||d.t===type)&&!(hideSmall&&d.small))}
+function render(){
+  const v=shown();list.innerHTML='';
+  v.forEach(d=>{const i=data.indexOf(d),el=document.createElement('div');
+    el.className='item'+(sel.has(i)?' sel':'');
+    el.innerHTML=`<input type="checkbox" ${sel.has(i)?'checked':''} aria-label="Chọn ${d.n}"><div class="thumb" style="background:${d.c}">${lab[d.t]}</div><div class="meta"><b>${d.n}</b><span>${d.s}</span></div>`;
+    el.onclick=()=>{sel.has(i)?sel.delete(i):sel.add(i);render()};list.appendChild(el)});
+  const n=v.filter(d=>sel.has(data.indexOf(d))).length;
+  $('#nCap').textContent=v.length;$('#fCap').textContent=v.length;
+  $('#selInfo').textContent='Đã chọn '+n;$('#dl').disabled=!n;
+  $('#dlText').textContent=n?`Tải ${n} mục đã chọn`:'Tải mục đã chọn';
+  $('#all').checked=v.length>0&&n===v.length;
+}
+$('#all').onchange=e=>{shown().forEach(d=>{const i=data.indexOf(d);e.target.checked?sel.add(i):sel.delete(i)});render()};
+document.querySelectorAll('#chips .chip[data-t]').forEach(c=>c.onclick=()=>{
+  document.querySelectorAll('#chips .chip[data-t]').forEach(x=>x.classList.remove('on'));c.classList.add('on');type=c.dataset.t;render()});
+$('#big').onclick=e=>{hideSmall=!hideSmall;e.currentTarget.classList.toggle('on',hideSmall);
+  if(hideSmall)data.forEach((d,i)=>d.small&&sel.delete(i));render()};
+function ink(){const t=$('.tab.on'),k=$('#ink');k.style.left=t.offsetLeft+'px';k.style.width=t.offsetWidth+'px'}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));t.classList.add('on');
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id===t.dataset.p));ink()});
+addEventListener('resize',ink);render();ink();
+</script>
+</body>
+</html>
