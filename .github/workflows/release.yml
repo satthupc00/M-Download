@@ -28,4 +28,4 @@ jobs:
           node scripts/release-notes.js > notes.md
           gh release delete "v$VERSION" --yes --cleanup-tag || true
           gh release create "v$VERSION" dist/*.exe dist/*.exe.blockmap dist/latest.yml \
-            --title "M-Download $VERSION" --notes-file notes.md --target "$GITHUB_SHA"
+            --title "M Download $VERSION" --notes-file notes.md --target "$GITHUB_SHA"
