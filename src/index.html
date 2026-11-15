@@ -105,6 +105,16 @@
       <p class="hint">Ảnh truyện lưu vào thư mục riêng theo tên trang, đánh số 001, 002… Video và file lưu thẳng vào thư mục này.</p>
     </div>
     <div class="group">
+      <h3>Thư mục theo loại file</h3>
+      <div id="sCats"></div>
+      <p class="hint">Loại nào chưa đặt thì lưu vào thư mục lưu ở trên.</p>
+    </div>
+    <div class="group">
+      <h3>Chung</h3>
+      <label class="line check"><input type="checkbox" id="sAuto"> Chạy cùng Windows khi khởi động</label>
+      <label class="line check"><input type="checkbox" id="sDone"> Hiện bảng thông báo khi tải xong</label>
+    </div>
+    <div class="group">
       <h3>Ảnh nhỏ</h3>
       <div class="line"><span>Coi là ảnh nhỏ khi cạnh ngắn dưới</span><input type="number" id="sMin" min="0" max="4000" step="50"><span>px</span></div>
     </div>
@@ -127,6 +137,44 @@
         <button class="second" id="sNew"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15v4M17 17h4"/></svg>What's new</button>
         <button class="second" id="sUpd">Kiểm tra cập nhật</button></div>
       <p class="hint" id="sUpdInfo"></p>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="dlDialog" hidden>
+  <div class="dialog" role="dialog" aria-label="Tải file">
+    <div class="dhead"><b>Tải file</b><button class="ibtn" data-close title="Để sau (Esc)" aria-label="Để sau"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="form">
+      <label for="dName">Tên file</label><input type="text" id="dName" spellcheck="false">
+      <span>Địa chỉ</span><div class="path" id="dUrl"></div>
+      <span>Kích thước</span><div><span id="dSize"></span> · <span id="dCat"></span></div>
+      <span>Lưu vào</span><div class="line"><span class="path" id="dDir"></span><button class="second" id="dPick">Đổi…</button></div>
+      <span></span><label class="line check"><input type="checkbox" id="dRemember"> <span id="dRememberText"></span></label>
+    </div>
+    <div class="dfoot">
+      <button class="second" id="dCancel" title="Bỏ link này khỏi danh sách">Huỷ</button>
+      <button class="second" id="dLater" title="Giữ link trong bảng Bắt được để tải sau">Để sau</button>
+      <button class="primary" id="dGo"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>Tải ngay</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="progDialog" hidden>
+  <div class="dialog" role="dialog" aria-label="Tiến trình tải">
+    <div class="dhead"><b id="pTitle">Đang tải</b><button class="ibtn" data-close title="Ẩn bảng, vẫn tải tiếp (Esc)" aria-label="Ẩn bảng"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="pname" id="pName"></div>
+    <div class="bar big"><u id="pBar"></u></div>
+    <div class="pinfo"><span id="pInfo"></span><span class="sp"></span><span id="pPct"></span></div>
+    <div class="path ppath" id="pPath"></div>
+    <div class="dfoot" id="pRun">
+      <button class="second" id="pCancel">Huỷ tải</button>
+      <button class="second" id="pPause">Tạm dừng</button>
+      <button class="second" id="pHide" title="Vẫn tải tiếp, xem ở tab Đang tải">Ẩn bảng</button>
+    </div>
+    <div class="dfoot" id="pDone" hidden>
+      <button class="second" id="pClose">Đóng</button>
+      <button class="second" id="pFolder">Mở thư mục</button>
+      <button class="primary" id="pOpen">Mở file</button>
     </div>
   </div>
 </div>

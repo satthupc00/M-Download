@@ -1,8 +1,12 @@
 {
-  "version": "1.1.1",
-  "date": "2026-11-14",
+  "version": "1.2.0",
+  "date": "2026-11-15",
   "new": [
-    "Logo chính thức của M-Download"
+    "Bấm link tải trực tiếp (exe, zip…) trong trình duyệt của app là hiện ngay bảng \"Tải file\": đổi tên, chọn nơi lưu, Tải ngay hoặc Để sau",
+    "Nhớ thư mục riêng cho từng loại file (chương trình, file nén, tài liệu, video, nhạc, file thiết kế), chỉnh trong Cài đặt",
+    "Bảng tiến trình khi đang tải: tốc độ, thời gian còn lại, tạm dừng, huỷ",
+    "Bảng \"Tải xong\" có nút Mở file và Mở thư mục",
+    "Tuỳ chọn chạy cùng Windows khi khởi động trong Cài đặt"
   ],
   "improved": [],
   "fixed": []

@@ -15,7 +15,7 @@ let ses = null;
 
 /* ---------- cài đặt ---------- */
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
-let settings = { saveDir: '', minSize: 300, hideSmall: true, videoQuality: '1080', ytUpdated: 0, bounds: null, done: [] };
+let settings = { saveDir: '', minSize: 300, hideSmall: true, videoQuality: '1080', ytUpdated: 0, bounds: null, done: [], typeDirs: {}, showDone: true };
 function loadSettings() {
   try { Object.assign(settings, JSON.parse(fs.readFileSync(settingsFile(), 'utf8'))); } catch { /* lần đầu mở */ }
   if (!settings.saveDir) settings.saveDir = path.join(app.getPath('downloads'), 'M-Download');
@@ -51,6 +51,20 @@ function classify(d) {
   if (type === 'img' && (ct === 'image/svg+xml' || /\.(svg|ico)$/i.test(p))) return null;
   return { url: d.url, type, size, mime: ct };
 }
+
+/* ---------- loại file và thư mục riêng cho từng loại ---------- */
+const CATS = [
+  ['prog', 'Chương trình', /\.(exe|msi|apk|bat|iso|dmg)$/i],
+  ['zip', 'File nén', /\.(zip|rar|7z|tar|gz|cbz|cbr)$/i],
+  ['doc', 'Tài liệu', /\.(pdf|docx?|xlsx?|pptx?|epub|txt)$/i],
+  ['video', 'Video', /\.(mp4|webm|mkv|mov|m4v|avi|flv)$/i],
+  ['music', 'Nhạc', /\.(mp3|m4a|ogg|wav|flac|aac)$/i],
+  ['art', 'File thiết kế', /\.(psd|psb|clip|ai|eps|blend|fbx|obj|spine|skel|atlas|ttf|otf)$/i],
+  ['other', 'Loại khác', /./],
+];
+const catOf = (name) => CATS.find((c) => c[2].test(name || '')) || CATS[CATS.length - 1];
+const catDir = (cat) => (settings.typeDirs && settings.typeDirs[cat]) || settings.saveDir;
+const catList = () => CATS.map(([cat, label]) => ({ cat, label, dir: (settings.typeDirs || {})[cat] || '' }));
 
 /* ---------- tải file ---------- */
 const batches = [];        // {id,title,dir,isChapter,items:[{url,name,dest,state,got,total}],state,referer,ctrl:Set}
@@ -315,25 +329,27 @@ function startDownload(req) {
     });
   }
   for (const i of others) {
-    fs.mkdirSync(root, { recursive: true });
     let name = '';
     try { name = decodeURIComponent(path.basename(urlPathname(i.url))); } catch { name = path.basename(urlPathname(i.url)); }
     name = cleanName(i.name || name, 'file');
     if (!path.extname(name)) name += extOf(i.url, i.mime);
-    const dest = uniquePath(path.join(root, name));
-    out.push({ id: nextId++, title: path.basename(dest), dir: root, isChapter: false, state: 'running', referer: req.pageUrl, ctrl: new Set(),
+    const dir = (typeof i.dir === 'string' && i.dir) || catDir(catOf(name)[0]);
+    fs.mkdirSync(dir, { recursive: true });
+    const dest = uniquePath(path.join(dir, name));
+    out.push({ id: nextId++, title: path.basename(dest), dir, isChapter: false, state: 'running', referer: req.pageUrl, ctrl: new Set(),
       items: [{ url: i.url, dest, state: 'queued', got: 0, total: 0 }] });
   }
   for (const i of videos) {
-    fs.mkdirSync(root, { recursive: true });
-    out.push({ id: nextId++, kind: 'ytdl', title: cleanName(req.title, 'Video'), dir: root, isChapter: false, state: 'running', referer: req.pageUrl,
+    const dir = catDir('video');
+    fs.mkdirSync(dir, { recursive: true });
+    out.push({ id: nextId++, kind: 'ytdl', title: cleanName(req.title, 'Video'), dir, isChapter: false, state: 'running', referer: req.pageUrl,
       ctrl: new Set(), stream: i.type === 'stream', quality: settings.videoQuality,
-      items: [{ url: i.url, dest: root, state: 'queued', got: 0, total: 0 }] });
+      items: [{ url: i.url, dest: dir, state: 'queued', got: 0, total: 0 }] });
   }
   batches.push(...out);
   pushState();
   pump();
-  return out.length;
+  return out.map((b) => b.id);
 }
 
 function batchAction({ id, action }) {
@@ -439,7 +455,7 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), partition: PARTITION, webviewTag: true, contextIsolation: true, nodeIntegration: false },
   });
   if (b.max) win.maximize();
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => { if (process.argv.includes('--autostart')) win.minimize(); else win.show(); });
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
   hookShortcuts(win.webContents);
 
@@ -472,12 +488,31 @@ ipcMain.handle('init', () => {
   let whatsnew = null;
   try { whatsnew = JSON.parse(fs.readFileSync(path.join(__dirname, 'whatsnew.json'), 'utf8')); } catch { /* thiếu file */ }
   setTimeout(() => { send('update', updState); pushState(); }, 0);
-  return { version: app.getVersion(), settings: { saveDir: settings.saveDir, minSize: settings.minSize, hideSmall: settings.hideSmall, videoQuality: settings.videoQuality }, whatsnew };
+  return { version: app.getVersion(), settings: { saveDir: settings.saveDir, minSize: settings.minSize, hideSmall: settings.hideSmall, videoQuality: settings.videoQuality, showDone: settings.showDone !== false, autoStart: getAutoStart() },
+    cats: catList(), whatsnew };
 });
 ipcMain.on('set-page', (_e, url) => { pageUrl = String(url || ''); });
 ipcMain.handle('download', (_e, req) => startDownload(req));
 ipcMain.on('batch-action', (_e, a) => batchAction(a));
 ipcMain.on('clear-done', () => { settings.done = []; saveSettings(); pushState(); });
+function getAutoStart() { try { return app.getLoginItemSettings({ args: ['--autostart'] }).openAtLogin; } catch { return false; } }
+ipcMain.handle('set-auto-start', (_e, on) => {
+  try { app.setLoginItemSettings({ openAtLogin: !!on, args: ['--autostart'] }); } catch { /* hệ điều hành không hỗ trợ */ }
+  return getAutoStart();
+});
+ipcMain.handle('file-plan', (_e, name) => { const c = catOf(String(name || '')); return { cat: c[0], label: c[1], dir: catDir(c[0]) }; });
+ipcMain.handle('set-type-dir', (_e, { cat, dir }) => {
+  if (!CATS.some((c) => c[0] === cat)) return catList();
+  settings.typeDirs = settings.typeDirs || {};
+  if (dir) settings.typeDirs[cat] = String(dir); else delete settings.typeDirs[cat];
+  saveSettings();
+  return catList();
+});
+ipcMain.handle('pick-dir', async (_e, start) => {
+  const r = await dialog.showOpenDialog(win, { title: 'Chọn thư mục lưu', defaultPath: start || settings.saveDir, properties: ['openDirectory', 'createDirectory'] });
+  return r.canceled ? null : r.filePaths[0] || null;
+});
+ipcMain.on('open-file', (_e, p) => { if (typeof p === 'string' && fs.existsSync(p)) shell.openPath(p); });
 ipcMain.on('open-path', (_e, p) => {
   if (typeof p !== 'string' || !fs.existsSync(p)) return;
   if (fs.statSync(p).isDirectory()) shell.openPath(p); else shell.showItemInFolder(p);
@@ -491,6 +526,7 @@ ipcMain.handle('pick-save-dir', async () => {
 ipcMain.on('set-setting', (_e, { key, value }) => {
   if (key === 'minSize') settings.minSize = Math.max(0, Math.min(4000, Number(value) || 0));
   else if (key === 'hideSmall') settings.hideSmall = !!value;
+  else if (key === 'showDone') settings.showDone = !!value;
   else if (key === 'videoQuality' && ['best', '2160', '1080', '720', '480', 'audio'].includes(value)) settings.videoQuality = value;
   else return;
   saveSettings();

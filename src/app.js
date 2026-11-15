@@ -11,6 +11,7 @@ const state = {
   hideSmall: true,
   minSize: 300,
   videoQuality: '1080',
+  showDone: true,
   saveDir: '',
   title: '',
   pageKey: '',
@@ -163,11 +164,7 @@ function addItem(it) {
   if (it.name) cur.name = it.name;
   if (it.ref) cur.ref = it.ref;
   if (it.type === 'stream' || (cur.type === 'img' && it.type !== 'img')) cur.type = it.type;
-  if (it.wanted) {
-    state.sel.add(cur.url);
-    toast('Đã bắt link file: ' + cur.name + '. Bấm nút tải khi bạn muốn.');
-    showTab('cap');
-  }
+  if (it.wanted) askDownload(cur);
   queueRender();
 }
 function clearCaptured() {
@@ -479,12 +476,14 @@ function renderDownloads({ active, done }) {
     }
   }
   $('#nRun').textContent = active.length;
+  updateProgress(active);
 
   const fin = $('#finList');
   const sig = done.map((d) => d.id + ':' + d.at).join(',');
   if (fin.dataset.sig !== sig) {
     if (fin.dataset.sig !== undefined && done.length && !(fin.dataset.sig || '').includes(done[0].id + ':' + done[0].at)) {
-      toast('Tải xong: ' + done[0].title, { label: 'Mở thư mục', run: () => api.openPath(done[0].file) });
+      if (state.showDone || watch.id === done[0].id) showDone(done[0]);
+      else toast('Tải xong: ' + done[0].title, { label: 'Mở thư mục', run: () => api.openPath(done[0].file) });
     }
     fin.dataset.sig = sig;
     fin.textContent = '';
@@ -501,6 +500,8 @@ function renderDownloads({ active, done }) {
     $('#nFin').textContent = done.length;
     $('#clearDone').disabled = !done.length;
   }
+  // mục đang theo dõi bị huỷ -> đóng bảng tiến trình
+  if (watch.id !== null && watch.shown && $('#pDone').hidden && !active.some((b) => b.id === watch.id)) { $('#progDialog').hidden = true; watch.id = null; }
   ink();
 }
 $('#clearDone').onclick = () => api.clearDone();
@@ -534,10 +535,124 @@ $('#fDir').onclick = () => api.openSaveDir();
 function openModal(id) { $(id).hidden = false; const f = $(id + ' [data-close]'); if (f) f.focus(); }
 function closeModals() { $$('.modal').forEach((m) => { m.hidden = true; }); }
 $$('.modal').forEach((m) => {
-  m.addEventListener('mousedown', (e) => { if (e.target === m) m.hidden = true; });
-  m.querySelector('[data-close]').onclick = () => { m.hidden = true; };
+  m.addEventListener('mousedown', (e) => { if (e.target === m) closeModal(m); });
+  m.querySelector('[data-close]').onclick = () => closeModal(m);
 });
-addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModals(); });
+function closeModal(m) {
+  if (m.hidden) return;
+  m.hidden = true;
+  if (m.id === 'dlDialog') askLater();
+  if (m.id === 'progDialog') watch.id = null;
+}
+addEventListener('keydown', (e) => { if (e.key === 'Escape') $$('.modal').forEach(closeModal); });
+
+/* ---------- bảng tải file: hiện khi bấm link tải trực tiếp (exe, zip…) ---------- */
+const ask = { queue: [], cur: null, plan: null, dir: '' };
+function askDownload(it) {
+  if (ask.cur === it || ask.queue.includes(it)) return;
+  ask.queue.push(it);
+  if (!ask.cur) nextAsk();
+}
+async function nextAsk() {
+  const it = ask.cur = ask.queue.shift() || null;
+  if (!it) { $('#dlDialog').hidden = true; return; }
+  ask.plan = await api.filePlan(it.name);
+  ask.dir = ask.plan.dir;
+  $('#dName').value = it.name;
+  $('#dUrl').textContent = it.url; $('#dUrl').title = it.url;
+  $('#dSize').textContent = fmtSize(it.size) || 'Chưa rõ kích thước';
+  $('#dCat').textContent = ask.plan.label;
+  $('#dDir').textContent = ask.dir; $('#dDir').title = ask.dir;
+  $('#dRememberText').textContent = `Luôn lưu loại "${ask.plan.label}" vào thư mục này`;
+  $('#dRemember').checked = false;
+  $('#progDialog').hidden = true;
+  $('#dlDialog').hidden = false;
+  $('#dGo').focus();
+}
+function askLater() { if (ask.cur) { ask.cur = null; nextAsk(); } }
+function dropAsked() { const it = ask.cur; if (it) { state.items.delete(it.url); state.sel.delete(it.url); queueRender(); } }
+$('#dPick').onclick = async () => {
+  const p = await api.pickDir(ask.dir);
+  if (p) { ask.dir = p; $('#dDir').textContent = p; $('#dDir').title = p; $('#dRemember').checked = true; }
+};
+$('#dLater').onclick = () => { $('#dlDialog').hidden = true; showTab('cap'); askLater(); };
+$('#dCancel').onclick = () => { dropAsked(); $('#dlDialog').hidden = true; askLater(); };
+$('#dName').onkeydown = (e) => { if (e.key === 'Enter') $('#dGo').click(); };
+$('#dGo').onclick = async () => {
+  const it = ask.cur;
+  if (!it) return;
+  if ($('#dRemember').checked) renderCats(await api.setTypeDir(ask.plan.cat, ask.dir));
+  const name = $('#dName').value.trim() || it.name;
+  const ids = await api.download({ title: state.title, pageUrl: view.hidden ? '' : view.getURL(),
+    items: [{ url: it.url, type: 'file', mime: it.mime, name, dir: ask.dir }] });
+  dropAsked();
+  $('#dlDialog').hidden = true;
+  ask.cur = null;
+  if (ask.queue.length) nextAsk(); else { watch.id = ids[0]; watch.shown = false; }
+};
+
+/* ---------- bảng tiến trình và bảng tải xong ---------- */
+const watch = { id: null, shown: false, done: null };
+function progMode(done) {
+  $('#progDialog .dialog').classList.toggle('done', done);
+  $('#pRun').hidden = done; $('#pDone').hidden = !done;
+  $('#pTitle').textContent = done ? 'Tải xong' : 'Đang tải';
+}
+function updateProgress(active) {
+  if (watch.id === null) return;
+  const b = active.find((x) => x.id === watch.id);
+  if (!b) return;
+  if (!watch.shown) { watch.shown = true; watch.done = null; progMode(false); $('#progDialog').hidden = false; $('#pHide').focus(); }
+  const [cls, text] = runText(b);
+  $('#pName').textContent = b.title;
+  $('#pInfo').textContent = text; $('#pInfo').parentNode.className = 'pinfo ' + cls;
+  const frac = b.count > 1 ? b.done / b.count : (b.total ? b.got / b.total : 0);
+  $('#pBar').style.transform = `scaleX(${Math.min(1, frac)})`;
+  $('#pPct').textContent = frac ? Math.floor(frac * 100) + '%' : '';
+  $('#pPath').textContent = b.file; $('#pPath').title = b.file;
+  const act = b.state === 'paused' ? 'resume' : b.state === 'error' ? 'retry' : 'pause';
+  $('#pPause').dataset.act = act;
+  $('#pPause').textContent = act === 'pause' ? 'Tạm dừng' : act === 'resume' ? 'Tiếp tục' : 'Tải lại';
+}
+function showDone(d) {
+  if (!$('#dlDialog').hidden) return;   // đang hỏi file khác thì không chen ngang
+  watch.id = d.id; watch.shown = true; watch.done = d;
+  progMode(true);
+  $('#pName').textContent = d.title;
+  $('#pBar').style.transform = 'scaleX(1)';
+  $('#pInfo').textContent = 'Đã tải xong' + (d.isChapter ? ` · ${d.count} ảnh` : '') + (d.bytes ? ' · ' + fmtSize(d.bytes) : '');
+  $('#pInfo').parentNode.className = 'pinfo';
+  $('#pPct').textContent = '';
+  $('#pPath').textContent = d.file; $('#pPath').title = d.file;
+  $('#pOpen').hidden = d.isChapter;
+  $('#progDialog').hidden = false;
+  (d.isChapter ? $('#pFolder') : $('#pOpen')).focus();
+}
+const hideProg = () => closeModal($('#progDialog'));
+$('#pHide').onclick = hideProg;
+$('#pClose').onclick = hideProg;
+$('#pPause').onclick = () => { if (watch.id !== null) api.batchAction(watch.id, $('#pPause').dataset.act); };
+$('#pCancel').onclick = () => { if (watch.id !== null) api.batchAction(watch.id, 'cancel'); hideProg(); };
+$('#pFolder').onclick = () => { if (watch.done) api.openPath(watch.done.file); hideProg(); };
+$('#pOpen').onclick = () => { if (watch.done) api.openFile(watch.done.file); hideProg(); };
+
+/* ---------- cài đặt: thư mục theo loại, chạy cùng Windows ---------- */
+function renderCats(cats) {
+  const box = $('#sCats');
+  box.textContent = '';
+  for (const c of cats) {
+    const row = document.createElement('div');
+    row.className = 'catrow';
+    row.innerHTML = `<b>${esc(c.label)}</b><span class="path" title="${esc(c.dir)}">${esc(c.dir || 'Theo thư mục lưu')}</span><button class="second">Đổi…</button>` +
+      (c.dir ? '<button class="second" title="Dùng lại thư mục lưu chung">Bỏ</button>' : '');
+    const [pick, reset] = row.querySelectorAll('button');
+    pick.onclick = async () => { const p = await api.pickDir(c.dir || state.saveDir); if (p) renderCats(await api.setTypeDir(c.cat, p)); };
+    if (reset) reset.onclick = async () => renderCats(await api.setTypeDir(c.cat, null));
+    box.appendChild(row);
+  }
+}
+$('#sAuto').onchange = async (e) => { e.target.checked = await api.setAutoStart(e.target.checked); };
+$('#sDone').onchange = (e) => { state.showDone = e.target.checked; api.setSetting('showDone', state.showDone); };
 $('#settingsBtn').onclick = () => openModal('#settings');
 $('#sMin').onchange = (e) => {
   state.minSize = Math.max(0, Math.min(4000, Number(e.target.value) || 0));
@@ -617,6 +732,9 @@ api.onShortcut((s) => {
   state.saveDir = r.settings.saveDir; state.minSize = r.settings.minSize; state.hideSmall = r.settings.hideSmall;
   $('#sVer').textContent = 'M-Download v' + r.version;
   $('#sMin').value = state.minSize;
+  state.showDone = r.settings.showDone; $('#sDone').checked = state.showDone;
+  $('#sAuto').checked = r.settings.autoStart;
+  renderCats(r.cats);
   state.videoQuality = r.settings.videoQuality || '1080';
   $('#sQuality').value = state.videoQuality;
   syncDir(); syncSmall(); render();
