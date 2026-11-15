@@ -1,13 +1,13 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "date": "2026-11-15",
   "new": [
-    "Bấm link tải trực tiếp (exe, zip…) trong trình duyệt của app là hiện ngay bảng \"Tải file\": đổi tên, chọn nơi lưu, Tải ngay hoặc Để sau",
-    "Nhớ thư mục riêng cho từng loại file (chương trình, file nén, tài liệu, video, nhạc, file thiết kế), chỉnh trong Cài đặt",
-    "Bảng tiến trình khi đang tải: tốc độ, thời gian còn lại, tạm dừng, huỷ",
-    "Bảng \"Tải xong\" có nút Mở file và Mở thư mục",
-    "Tuỳ chọn chạy cùng Windows khi khởi động trong Cài đặt"
+    "Extension cho Chrome và Edge: bấm link tải trong trình duyệt là M-Download tự bật bảng \"Tải file\"",
+    "Menu chuột phải trong trình duyệt: tải link, ảnh, video bằng M-Download hoặc mở cả trang trong M-Download để bắt ảnh",
+    "Nút \"Mở thư mục extension\" kèm hướng dẫn cài trong Cài đặt"
   ],
-  "improved": [],
+  "improved": [
+    "File gửi từ trình duyệt được tải bằng đúng phiên đăng nhập của trình duyệt đó"
+  ],
   "fixed": []
 }

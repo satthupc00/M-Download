@@ -584,7 +584,7 @@ $('#dGo').onclick = async () => {
   if ($('#dRemember').checked) renderCats(await api.setTypeDir(ask.plan.cat, ask.dir));
   const name = $('#dName').value.trim() || it.name;
   const ids = await api.download({ title: state.title, pageUrl: view.hidden ? '' : view.getURL(),
-    items: [{ url: it.url, type: 'file', mime: it.mime, name, dir: ask.dir }] });
+    items: [{ url: it.url, type: 'file', mime: it.mime, name, dir: ask.dir, ref: it.ref }] });
   dropAsked();
   $('#dlDialog').hidden = true;
   ask.cur = null;
@@ -713,6 +713,8 @@ $('#sUpd').onclick = clickUpdate;
 /* ---------- nối với phần lõi ---------- */
 api.onCaptured(addItem);
 api.onDownloads(renderDownloads);
+api.onOpenUrl((url) => { document.querySelectorAll('.modal').forEach(closeModal); go(url); });
+$('#sExt').onclick = () => api.openExtensionDir();
 api.onUpdate(renderUpdate);
 api.onPopup((url) => {
   let host = url; try { host = new URL(url).hostname; } catch { /* giữ nguyên */ }

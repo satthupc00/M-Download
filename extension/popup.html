@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<style>
+:root{--chrome:#1F2126;--panel:#26292F;--line:#363A42;--text:#E8E9EC;--muted:#8D929C;--red:#E5383B;--green:#2EB872}
+*{box-sizing:border-box}
+body{margin:0;width:300px;background:var(--chrome);color:var(--text);font:13px/1.4 "Segoe UI",system-ui,sans-serif;user-select:none}
+.top{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.top img{width:34px;height:34px}
+.name{font-size:17px;font-weight:700;line-height:34px}
+.name .m{color:var(--red)}
+.box{padding:12px 14px;display:grid;gap:12px}
+.row{display:flex;align-items:center;gap:10px;cursor:pointer}
+.row span{flex:1}
+input[type=checkbox]{appearance:none;width:34px;height:20px;margin:0;border-radius:20px;background:#474C55;position:relative;cursor:pointer;transition:background-color .22s;flex:0 0 auto}
+input[type=checkbox]::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .22s cubic-bezier(.34,1.56,.64,1)}
+input[type=checkbox]:checked{background:var(--red)}
+input[type=checkbox]:checked::after{transform:translateX(14px)}
+.status{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+.status i{width:10px;height:10px;border-radius:50%;background:#A6A9B0;flex:0 0 auto;transition:background-color .3s}
+.status.ok i{background:var(--green)}.status.ok{color:var(--green)}
+.status.bad i{background:var(--red)}
+button{height:32px;border:1px solid var(--line);border-radius:6px;background:none;color:var(--text);font:inherit;cursor:pointer;transition:border-color .12s,transform .22s cubic-bezier(.22,1,.36,1)}
+button:hover{border-color:var(--red);transform:translateY(-1px)}
+button:active{transform:scale(.97)}
+:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+.foot{padding:8px 14px;border-top:1px solid var(--line);text-align:right;color:#6B707A;font-size:11px}
+@media (prefers-reduced-motion:reduce){*,*::after{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="top"><img src="icons/128.png" alt=""><div class="name"><span class="m">M</span>-Download</div></div>
+<div class="box">
+  <label class="row"><span>Chuyển file tải sang M-Download</span><input type="checkbox" id="on"></label>
+  <div class="status" id="status"><i></i><span id="statusText">Đang kiểm tra…</span></div>
+  <button id="open" title="Mở trang đang xem trong M-Download để bắt ảnh, video">Mở trang này trong M-Download</button>
+</div>
+<div class="foot">Created by Mondiro</div>
+<script src="popup.js"></script>
+</body>
+</html>

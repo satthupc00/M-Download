@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('api', {
   pickDir: (start) => ipcRenderer.invoke('pick-dir', start),
   openFile: (p) => ipcRenderer.send('open-file', p),
   setAutoStart: (on) => ipcRenderer.invoke('set-auto-start', on),
+  openExtensionDir: () => ipcRenderer.send('open-extension-dir'),
+  onOpenUrl: on('open-url'),
   updateAction: () => ipcRenderer.send('update-action'),
   onCaptured: on('captured'),
   onDownloads: on('downloads'),

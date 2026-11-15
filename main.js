@@ -3,6 +3,7 @@ const { spawn, execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { Readable } = require('stream');
+const http = require('http');
 
 const PARTITION = 'persist:browse';
 const HEADER_H = 58;
@@ -337,7 +338,7 @@ function startDownload(req) {
     fs.mkdirSync(dir, { recursive: true });
     const dest = uniquePath(path.join(dir, name));
     out.push({ id: nextId++, title: path.basename(dest), dir, isChapter: false, state: 'running', referer: req.pageUrl, ctrl: new Set(),
-      items: [{ url: i.url, dest, state: 'queued', got: 0, total: 0 }] });
+      items: [{ url: i.url, ref: i.ref, dest, state: 'queued', got: 0, total: 0 }] });
   }
   for (const i of videos) {
     const dir = catDir('video');
@@ -402,6 +403,51 @@ function updateAction() {
   else if (updState.state !== 'checking' && updState.state !== 'downloading') updater.checkForUpdates().catch(() => {});
 }
 
+/* ---------- nhận link từ extension Chrome (chỉ nghe trên máy này) ---------- */
+const EXT_PORT = 47615;
+const fromChrome = new Map();
+function raiseWindow() {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.setAlwaysOnTop(true); win.focus(); win.setAlwaysOnTop(false);
+}
+function startExtServer() {
+  const server = http.createServer((req, res) => {
+    const origin = req.headers.origin || '';
+    const fromExt = /^(chrome|moz)-extension:\/\//.test(origin);
+    const reply = (code, obj) => {
+      res.writeHead(code, { 'Content-Type': 'application/json', ...(fromExt ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Headers': 'Content-Type' } : {}) });
+      res.end(JSON.stringify(obj));
+    };
+    if (origin && !fromExt) return reply(403, { ok: false });     // trang web thường không được gọi
+    if (req.method === 'OPTIONS') return reply(200, { ok: true });
+    if (req.method === 'GET' && req.url === '/ping') return reply(200, { ok: true, app: 'M-Download', version: app.getVersion() });
+    if (req.method !== 'POST' || !fromExt) return reply(404, { ok: false });
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 3e5) req.destroy(); });
+    req.on('end', () => {
+      let d; try { d = JSON.parse(body); } catch { return reply(400, { ok: false }); }
+      const url = String(d.url || '');
+      if (!/^https?:\/\//.test(url) || !win) return reply(400, { ok: false });
+      if (req.url === '/add') {
+        fromChrome.set(url, { cookie: String(d.cookie || ''), ua: String(d.ua || '') });
+        if (d.referrer) referers.set(url, String(d.referrer));
+        let name = String(d.name || '');
+        if (!name) { try { name = decodeURIComponent(path.basename(urlPathname(url))); } catch { name = path.basename(urlPathname(url)); } }
+        raiseWindow();
+        send('captured', { url, type: 'file', size: Number(d.size) || 0, mime: String(d.mime || ''), name: cleanName(name, 'file'), ref: String(d.referrer || ''), wanted: true });
+        return reply(200, { ok: true });
+      }
+      if (req.url === '/open') { raiseWindow(); send('open-url', url); return reply(200, { ok: true }); }
+      reply(404, { ok: false });
+    });
+  });
+  server.on('error', () => { /* cổng đang bận: bỏ qua, app vẫn chạy bình thường */ });
+  server.listen(EXT_PORT, '127.0.0.1');
+}
+const extDir = () => (app.isPackaged ? path.join(process.resourcesPath, 'extension') : path.join(__dirname, 'extension'));
+
 /* ---------- cửa sổ ---------- */
 function shortcut(input) {
   if (input.type !== 'keyDown') return null;
@@ -426,9 +472,13 @@ function createWindow() {
   // Gắn Referer cho ảnh xem trước và file tải (nhiều trang chặn tải nếu thiếu)
   ses.webRequest.onBeforeSendHeaders((d, cb) => {
     const h = d.requestHeaders;
-    if (d.webContentsId !== viewId && /^https?:/.test(d.url) && !h.Referer && !h.referer) {
-      const ref = referers.get(d.url) || pageUrl;
-      if (ref) h.Referer = ref;
+    if (d.webContentsId !== viewId && /^https?:/.test(d.url)) {
+      if (!h.Referer && !h.referer) {
+        const ref = referers.get(d.url) || pageUrl;
+        if (ref) h.Referer = ref;
+      }
+      const x = fromChrome.get(d.url);   // link gửi từ Chrome: dùng phiên đăng nhập của Chrome
+      if (x) { if (x.cookie) h.Cookie = x.cookie; if (x.ua) h['User-Agent'] = x.ua; }
     }
     cb({ requestHeaders: h });
   });
@@ -512,6 +562,7 @@ ipcMain.handle('pick-dir', async (_e, start) => {
   const r = await dialog.showOpenDialog(win, { title: 'Chọn thư mục lưu', defaultPath: start || settings.saveDir, properties: ['openDirectory', 'createDirectory'] });
   return r.canceled ? null : r.filePaths[0] || null;
 });
+ipcMain.on('open-extension-dir', () => { if (fs.existsSync(extDir())) shell.openPath(extDir()); });
 ipcMain.on('open-file', (_e, p) => { if (typeof p === 'string' && fs.existsSync(p)) shell.openPath(p); });
 ipcMain.on('open-path', (_e, p) => {
   if (typeof p !== 'string' || !fs.existsSync(p)) return;
@@ -553,6 +604,7 @@ else {
     Menu.setApplicationMenu(null);
     loadSettings();
     createWindow();
+    startExtServer();
     win.webContents.once('did-finish-load', setupUpdater);
     setTimeout(updateYtdlp, 8000);
   });
