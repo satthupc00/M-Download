@@ -1,9 +1,12 @@
-const { app, BrowserWindow, ipcMain, session, shell, dialog, Menu, net } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell, dialog, Menu, net, Tray, clipboard, nativeImage } = require('electron');
 const { spawn, execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { Readable } = require('stream');
 const http = require('http');
+
+// Giữ nguyên thư mục dữ liệu cũ sau khi đổi tên app thành "M Download"
+app.setPath('userData', path.join(app.getPath('appData'), 'M-Download'));
 
 const PARTITION = 'persist:browse';
 const HEADER_H = 58;
@@ -107,12 +110,13 @@ function summary(b) {
   return {
     id: b.id, title: b.title, dir: b.dir, isChapter: b.isChapter, state: b.state, count: b.items.length, done, failed,
     got: b.items.reduce((s, i) => s + i.got, 0), total: b.items.reduce((s, i) => s + (i.total || 0), 0),
-    speed: b.speed || 0, note: b.note || '', kind: b.kind || 'file', file: b.items.length === 1 ? b.items[0].dest : b.dir,
+    speed: b.speed || 0, note: b.note || '', kind: b.kind || 'file', popup: !!b.popup, file: b.items.length === 1 ? b.items[0].dest : b.dir,
   };
 }
 function pushState() {
   dirty = false;
-  send('downloads', { active: batches.map(summary), done: settings.done });
+  const data = { active: batches.map(summary), done: settings.done };
+  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('downloads', data);
 }
 setInterval(() => {
   for (const b of batches) {
@@ -130,8 +134,11 @@ function finishIfDone(b) {
   const failed = b.items.filter((i) => i.state === 'error').length;
   if (failed) { b.state = 'error'; return; }
   batches.splice(batches.indexOf(b), 1);
-  settings.done.unshift({ id: b.id, title: b.title, count: b.items.length, isChapter: b.isChapter,
-    bytes: b.items.reduce((s, i) => s + i.got, 0), file: b.items.length === 1 ? b.items[0].dest : b.dir, at: Date.now() });
+  const rec = { id: b.id, title: b.title, count: b.items.length, isChapter: b.isChapter, popup: !!b.popup,
+    bytes: b.items.reduce((s, i) => s + i.got, 0), file: b.items.length === 1 ? b.items[0].dest : b.dir, at: Date.now() };
+  settings.done.unshift(rec);
+  // tải từ trình duyệt mà bảng tiến trình đã đóng -> hiện bảng "Tải xong" riêng
+  if (b.popup && settings.showDone !== false && (!b.popupWc || b.popupWc.isDestroyed())) openPopup({ mode: 'done', done: rec });
   settings.done = settings.done.slice(0, 60);
   saveSettings();
 }
@@ -309,7 +316,7 @@ async function startYtdl(b) {
   } finally { b.starting = false; dirty = true; }
 }
 
-function startDownload(req) {
+function startDownload(req, sender) {
   // req: {title, pageUrl, items:[{url,type,mime}]}
   const root = settings.saveDir;
   const out = [];
@@ -347,6 +354,7 @@ function startDownload(req) {
       ctrl: new Set(), stream: i.type === 'stream', quality: settings.videoQuality,
       items: [{ url: i.url, dest: dir, state: 'queued', got: 0, total: 0 }] });
   }
+  if (sender && (!win || sender !== win.webContents)) for (const b of out) { b.popup = true; b.popupWc = sender; }
   batches.push(...out);
   pushState();
   pump();
@@ -422,7 +430,7 @@ function startExtServer() {
     };
     if (origin && !fromExt) return reply(403, { ok: false });     // trang web thường không được gọi
     if (req.method === 'OPTIONS') return reply(200, { ok: true });
-    if (req.method === 'GET' && req.url === '/ping') return reply(200, { ok: true, app: 'M-Download', version: app.getVersion() });
+    if (req.method === 'GET' && req.url === '/ping') return reply(200, { ok: true, app: 'M Download', version: app.getVersion() });
     if (req.method !== 'POST' || !fromExt) return reply(404, { ok: false });
     let body = '';
     req.on('data', (c) => { body += c; if (body.length > 3e5) req.destroy(); });
@@ -435,8 +443,8 @@ function startExtServer() {
         if (d.referrer) referers.set(url, String(d.referrer));
         let name = String(d.name || '');
         if (!name) { try { name = decodeURIComponent(path.basename(urlPathname(url))); } catch { name = path.basename(urlPathname(url)); } }
-        raiseWindow();
-        send('captured', { url, type: 'file', size: Number(d.size) || 0, mime: String(d.mime || ''), name: cleanName(name, 'file'), ref: String(d.referrer || ''), wanted: true });
+        // chỉ bật bảng tải nhỏ, không mở giao diện chính của app
+        openPopup({ mode: 'ask', info: { url, type: 'file', size: Number(d.size) || 0, mime: String(d.mime || ''), name: cleanName(name, 'file'), ref: String(d.referrer || '') } });
         return reply(200, { ok: true });
       }
       if (req.url === '/open') { raiseWindow(); send('open-url', url); return reply(200, { ok: true }); }
@@ -446,6 +454,51 @@ function startExtServer() {
   server.on('error', () => { /* cổng đang bận: bỏ qua, app vẫn chạy bình thường */ });
   server.listen(EXT_PORT, '127.0.0.1');
 }
+/* ---------- bảng tải nhỏ (cửa sổ riêng, dùng khi bắt link từ trình duyệt) ---------- */
+const popups = new Map();
+function openPopup(payload) {
+  const p = new BrowserWindow({
+    width: 520, height: payload.mode === 'ask' ? 330 : 236, useContentSize: true, resizable: false, maximizable: false, fullscreenable: false,
+    title: 'M Download', backgroundColor: '#1F2126', show: false, alwaysOnTop: true,
+    icon: path.join(__dirname, 'build', 'icon.png'),
+    titleBarStyle: 'hidden', titleBarOverlay: { color: '#1F2126', symbolColor: '#FFFFFF', height: 40 },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+  });
+  const id = p.webContents.id;
+  popups.set(id, payload);
+  p.on('closed', () => popups.delete(id));
+  p.once('ready-to-show', () => { p.show(); p.focus(); });
+  p.loadFile(path.join(__dirname, 'src', 'popup.html'));
+  return p;
+}
+ipcMain.handle('popup-init', (e) => {
+  const payload = popups.get(e.sender.id) || null;
+  if (payload && payload.mode === 'ask') { const c = catOf(payload.info.name); payload.plan = { cat: c[0], label: c[1], dir: catDir(c[0]) }; }
+  setTimeout(pushState, 0);
+  return payload && { ...payload, showDone: settings.showDone !== false };
+});
+ipcMain.on('popup-later', (e) => {   // "Để sau": đưa link vào bảng Bắt được của app
+  const payload = popups.get(e.sender.id);
+  if (payload && payload.info) send('captured', payload.info);
+});
+
+/* ---------- chạy ngầm: icon ở khay hệ thống ---------- */
+let tray = null;
+let quitting = false;
+function setupTray() {
+  try {
+    tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png')).resize({ width: 32, height: 32 }));
+    tray.setToolTip('M Download');
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: 'Mở M Download', click: raiseWindow },
+      { label: 'Mở thư mục tải về', click: () => { fs.mkdirSync(settings.saveDir, { recursive: true }); shell.openPath(settings.saveDir); } },
+      { type: 'separator' },
+      { label: 'Thoát hẳn', click: () => { quitting = true; app.quit(); } },
+    ]));
+    tray.on('click', raiseWindow);
+  } catch { tray = null; }
+}
+
 const extDir = () => (app.isPackaged ? path.join(process.resourcesPath, 'extension') : path.join(__dirname, 'extension'));
 
 /* ---------- cửa sổ ---------- */
@@ -497,7 +550,7 @@ function createWindow() {
   const b = settings.bounds || {};
   win = new BrowserWindow({
     width: b.width || 1280, height: b.height || 780, x: b.x, y: b.y, minWidth: 860, minHeight: 520,
-    title: 'M-Download', backgroundColor: '#1F2126', show: false,
+    title: 'M Download', backgroundColor: '#1F2126', show: false,
     icon: path.join(__dirname, 'build', 'icon.png'),
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: '#1F2126', symbolColor: '#FFFFFF', height: HEADER_H },
@@ -505,7 +558,7 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), partition: PARTITION, webviewTag: true, contextIsolation: true, nodeIntegration: false },
   });
   if (b.max) win.maximize();
-  win.once('ready-to-show', () => { if (process.argv.includes('--autostart')) win.minimize(); else win.show(); });
+  win.once('ready-to-show', () => { if (!process.argv.includes('--autostart')) win.show(); });   // mở cùng Windows thì chạy ngầm
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
   hookShortcuts(win.webContents);
 
@@ -530,6 +583,16 @@ function createWindow() {
       return { action: 'deny' };
     });
   });
+  // Bấm X: ẩn cửa sổ, app vẫn chạy ngầm ở khay hệ thống
+  win.on('close', (e) => {
+    if (quitting || !tray) return;
+    e.preventDefault();
+    win.hide();
+    if (!settings.trayHint && process.platform === 'win32') {
+      settings.trayHint = true; saveSettings();
+      try { tray.displayBalloon({ title: 'M Download vẫn đang chạy ngầm', content: 'Bấm icon ở góc phải thanh taskbar để mở lại, chuột phải để thoát hẳn.' }); } catch { /* bỏ qua */ }
+    }
+  });
   win.on('closed', () => { win = null; });
 }
 
@@ -542,7 +605,7 @@ ipcMain.handle('init', () => {
     cats: catList(), whatsnew };
 });
 ipcMain.on('set-page', (_e, url) => { pageUrl = String(url || ''); });
-ipcMain.handle('download', (_e, req) => startDownload(req));
+ipcMain.handle('download', (e, req) => startDownload(req, e.sender));
 ipcMain.on('batch-action', (_e, a) => batchAction(a));
 ipcMain.on('clear-done', () => { settings.done = []; saveSettings(); pushState(); });
 function getAutoStart() { try { return app.getLoginItemSettings({ args: ['--autostart'] }).openAtLogin; } catch { return false; } }
@@ -558,11 +621,11 @@ ipcMain.handle('set-type-dir', (_e, { cat, dir }) => {
   saveSettings();
   return catList();
 });
-ipcMain.handle('pick-dir', async (_e, start) => {
-  const r = await dialog.showOpenDialog(win, { title: 'Chọn thư mục lưu', defaultPath: start || settings.saveDir, properties: ['openDirectory', 'createDirectory'] });
+ipcMain.handle('pick-dir', async (e, start) => {
+  const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender) || win, { title: 'Chọn thư mục lưu', defaultPath: start || settings.saveDir, properties: ['openDirectory', 'createDirectory'] });
   return r.canceled ? null : r.filePaths[0] || null;
 });
-ipcMain.on('open-extension-dir', () => { if (fs.existsSync(extDir())) shell.openPath(extDir()); });
+ipcMain.handle('copy-extension-dir', () => { clipboard.writeText(extDir()); return extDir(); });
 ipcMain.on('open-file', (_e, p) => { if (typeof p === 'string' && fs.existsSync(p)) shell.openPath(p); });
 ipcMain.on('open-path', (_e, p) => {
   if (typeof p !== 'string' || !fs.existsSync(p)) return;
@@ -599,14 +662,16 @@ ipcMain.handle('fetch-html', async (_e, { url, referer }) => {
 /* ---------- khởi động ---------- */
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+  app.on('second-instance', raiseWindow);
+  app.on('before-quit', () => { quitting = true; });
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null);
     loadSettings();
+    setupTray();
     createWindow();
     startExtServer();
     win.webContents.once('did-finish-load', setupUpdater);
     setTimeout(updateYtdlp, 8000);
   });
-  app.on('window-all-closed', () => app.quit());
+  app.on('window-all-closed', () => { if (quitting || !tray) app.quit(); });
 }

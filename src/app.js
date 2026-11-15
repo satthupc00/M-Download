@@ -1,4 +1,4 @@
-/* M-Download · phần điều khiển giao diện */
+/* M Download · phần điều khiển giao diện */
 document.documentElement.classList.add('electron');
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -482,7 +482,8 @@ function renderDownloads({ active, done }) {
   const sig = done.map((d) => d.id + ':' + d.at).join(',');
   if (fin.dataset.sig !== sig) {
     if (fin.dataset.sig !== undefined && done.length && !(fin.dataset.sig || '').includes(done[0].id + ':' + done[0].at)) {
-      if (state.showDone || watch.id === done[0].id) showDone(done[0]);
+      if (done[0].popup) { /* đã có bảng riêng */ }
+      else if (state.showDone || watch.id === done[0].id) showDone(done[0]);
       else toast('Tải xong: ' + done[0].title, { label: 'Mở thư mục', run: () => api.openPath(done[0].file) });
     }
     fin.dataset.sig = sig;
@@ -714,7 +715,7 @@ $('#sUpd').onclick = clickUpdate;
 api.onCaptured(addItem);
 api.onDownloads(renderDownloads);
 api.onOpenUrl((url) => { document.querySelectorAll('.modal').forEach(closeModal); go(url); });
-$('#sExt').onclick = () => api.openExtensionDir();
+$('#sExt').onclick = async () => { await api.copyExtensionDir(); toast('Đã copy đường dẫn thư mục extension'); };
 api.onUpdate(renderUpdate);
 api.onPopup((url) => {
   let host = url; try { host = new URL(url).hostname; } catch { /* giữ nguyên */ }
@@ -732,7 +733,7 @@ api.onShortcut((s) => {
   const r = await api.init();
   state.version = r.version; state.whatsnew = r.whatsnew;
   state.saveDir = r.settings.saveDir; state.minSize = r.settings.minSize; state.hideSmall = r.settings.hideSmall;
-  $('#sVer').textContent = 'M-Download v' + r.version;
+  $('#sVer').textContent = 'M Download v' + r.version;
   $('#sMin').value = state.minSize;
   state.showDone = r.settings.showDone; $('#sDone').checked = state.showDone;
   $('#sAuto').checked = r.settings.autoStart;

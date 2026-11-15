@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+<title>M Download</title>
+<link rel="stylesheet" href="app.css">
+<style>
+.ptop{display:flex;align-items:center;gap:8px;height:40px;padding:0 150px 0 12px;-webkit-app-region:drag;flex:0 0 auto}
+.ptop img{width:20px;height:20px}
+.ptop b{font-size:13px}
+.ptop b i{font-style:normal;color:var(--red)}
+.pbody{flex:1;min-height:0;padding:0 18px 16px;display:flex;flex-direction:column}
+.pbody .form{border-top:1px solid var(--line)}
+.pbody .dfoot{margin-top:auto;padding-top:14px}
+.credit{position:fixed;left:14px;bottom:10px}
+</style>
+</head>
+<body>
+<header class="ptop"><img src="../build/icon.png" alt=""><b><i>M</i> Download</b><span id="ptitle" style="color:var(--muted)"></span></header>
+
+<section class="pbody" id="ask" hidden>
+  <div class="form">
+    <label for="dName">Tên file</label><input type="text" id="dName" spellcheck="false">
+    <span>Địa chỉ</span><div class="path" id="dUrl"></div>
+    <span>Kích thước</span><div><span id="dSize"></span> · <span id="dCat"></span></div>
+    <span>Lưu vào</span><div class="line"><span class="path" id="dDir"></span><button class="second" id="dPick">Đổi…</button></div>
+    <span></span><label class="line check"><input type="checkbox" id="dRemember"> <span id="dRememberText"></span></label>
+  </div>
+  <div class="dfoot">
+    <button class="second" id="dCancel" title="Không tải file này">Huỷ</button>
+    <button class="second" id="dLater" title="Đưa link vào bảng Bắt được của M Download để tải sau">Để sau</button>
+    <button class="primary" id="dGo"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>Tải ngay</button>
+  </div>
+</section>
+
+<section class="pbody" id="prog" hidden>
+  <div class="pname" id="pName"></div>
+  <div class="bar big"><u id="pBar"></u></div>
+  <div class="pinfo"><span id="pInfo"></span><span class="sp"></span><span id="pPct"></span></div>
+  <div class="path ppath" id="pPath"></div>
+  <div class="dfoot" id="pRun">
+    <button class="second" id="pCancel">Huỷ tải</button>
+    <button class="second" id="pPause">Tạm dừng</button>
+    <button class="second" id="pHide" title="Đóng bảng, vẫn tải tiếp">Ẩn bảng</button>
+  </div>
+  <div class="dfoot" id="pDone" hidden>
+    <button class="second" id="pClose">Đóng</button>
+    <button class="second" id="pFolder">Mở thư mục</button>
+    <button class="primary" id="pOpen">Mở file</button>
+  </div>
+</section>
+
+<span class="credit">Created by Mondiro</span>
+<script src="popup.js"></script>
+</body>
+</html>

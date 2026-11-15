@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "M-Download",
-  "version": "1.0.0",
-  "description": "Gửi link tải từ trình duyệt sang app M-Download. Created by Mondiro.",
-  "permissions": ["downloads", "contextMenus", "storage", "cookies"],
+  "name": "M Download",
+  "version": "1.1.0",
+  "description": "Gửi link tải từ trình duyệt sang app M Download. Created by Mondiro.",
+  "permissions": ["downloads", "downloads.ui", "contextMenus", "storage", "cookies"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" },
   "action": {
-    "default_title": "M-Download",
+    "default_title": "M Download",
     "default_popup": "popup.html",
     "default_icon": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png" }
   },

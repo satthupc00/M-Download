@@ -1,7 +1,7 @@
 {
   "name": "m-download",
-  "productName": "M-Download",
-  "version": "1.3.0",
+  "productName": "M Download",
+  "version": "1.4.0",
   "description": "Bắt link và tải ảnh, video, file từ trang web",
   "author": "Mondiro",
   "license": "UNLICENSED",
@@ -21,7 +21,7 @@
   },
   "build": {
     "appId": "com.mondiro.mdownload",
-    "productName": "M-Download",
+    "productName": "M Download",
     "files": [
       "main.js",
       "preload.js",

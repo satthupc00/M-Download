@@ -1,13 +1,15 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "date": "2026-11-15",
   "new": [
-    "Extension cho Chrome và Edge: bấm link tải trong trình duyệt là M-Download tự bật bảng \"Tải file\"",
-    "Menu chuột phải trong trình duyệt: tải link, ảnh, video bằng M-Download hoặc mở cả trang trong M-Download để bắt ảnh",
-    "Nút \"Mở thư mục extension\" kèm hướng dẫn cài trong Cài đặt"
+    "App đổi tên thành M Download",
+    "Bấm X thì app vẫn chạy ngầm, có icon ở khay hệ thống (góc phải thanh taskbar) để mở lại hoặc thoát hẳn",
+    "Bắt link từ Chrome chỉ hiện một bảng tải nhỏ, không bật giao diện chính của app"
   ],
   "improved": [
-    "File gửi từ trình duyệt được tải bằng đúng phiên đăng nhập của trình duyệt đó"
+    "Extension ẩn bảng tải của Chrome khi link đã chuyển sang M Download, và có công tắc tạm tắt",
+    "Nút extension trong Cài đặt đổi thành copy đường dẫn thư mục",
+    "Mở cùng Windows thì app chạy ngầm luôn, không hiện cửa sổ"
   ],
   "fixed": []
 }
