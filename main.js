@@ -414,6 +414,32 @@ function updateAction() {
 /* ---------- nhận link từ extension Chrome (chỉ nghe trên máy này) ---------- */
 const EXT_PORT = 47615;
 const fromChrome = new Map();
+
+// Đọc tên file trong Content-Disposition (hỗ trợ tên tiếng Việt)
+function dispositionName(h) {
+  if (!h) return '';
+  const star = /filename\*\s*=\s*([^']*)'[^']*'([^;]+)/i.exec(h);
+  if (star) { try { return decodeURIComponent(star[2].trim().replace(/^"|"$/g, '')); } catch { /* thử cách dưới */ } }
+  const m = /filename\s*=\s*("([^"]*)"|[^;]+)/i.exec(h);
+  let n = m ? (m[2] !== undefined ? m[2] : m[1]).trim() : '';
+  if (/[\u0080-ÿ]/.test(n)) { const u = Buffer.from(n, 'latin1').toString('utf8'); if (!u.includes('�')) n = u; }
+  try { if (/%[0-9a-f]{2}/i.test(n)) n = decodeURIComponent(n); } catch { /* giữ nguyên */ }
+  return path.basename(n.replace(/\\/g, '/'));
+}
+// Hỏi máy chủ tên file và kích thước (chỉ lấy phần đầu, không tải cả file)
+async function probe(url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 5000);
+  try {
+    const res = await ses.fetch(url, { headers: { Range: 'bytes=0-0' }, signal: ctrl.signal });
+    const range = /\/(\d+)\s*$/.exec(res.headers.get('content-range') || '');
+    const size = range ? +range[1] : res.status === 200 ? parseInt(res.headers.get('content-length') || '0', 10) || 0 : 0;
+    let name = dispositionName(res.headers.get('content-disposition'));
+    if (!name) { try { name = decodeURIComponent(path.basename(urlPathname(res.url || url))); } catch { /* bỏ qua */ } }
+    return { name: path.extname(name) ? name : '', size, mime: (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase() };
+  } catch { return { name: '', size: 0, mime: '' }; }
+  finally { clearTimeout(timer); ctrl.abort(); }
+}
 function raiseWindow() {
   if (!win) return;
   if (win.isMinimized()) win.restore();
@@ -441,11 +467,24 @@ function startExtServer() {
       if (req.url === '/add') {
         fromChrome.set(url, { cookie: String(d.cookie || ''), ua: String(d.ua || '') });
         if (d.referrer) referers.set(url, String(d.referrer));
-        let name = String(d.name || '');
-        if (!name) { try { name = decodeURIComponent(path.basename(urlPathname(url))); } catch { name = path.basename(urlPathname(url)); } }
-        // chỉ bật bảng tải nhỏ, không mở giao diện chính của app
-        openPopup({ mode: 'ask', info: { url, type: 'file', size: Number(d.size) || 0, mime: String(d.mime || ''), name: cleanName(name, 'file'), ref: String(d.referrer || '') } });
-        return reply(200, { ok: true });
+        reply(200, { ok: true });          // trả lời ngay để extension huỷ lượt tải của trình duyệt
+        (async () => {
+          let name = String(d.name || ''), size = Number(d.size) || 0, mime = String(d.mime || '');
+          if (!path.extname(name) || !size) {   // hỏi máy chủ tên file thật và kích thước
+            const p = await probe(url);
+            if (!path.extname(name) && p.name) name = p.name;
+            if (!size) size = p.size;
+            if (!mime) mime = p.mime;
+          }
+          if (!path.extname(name)) {
+            let n = '';
+            try { n = decodeURIComponent(path.basename(urlPathname(url))); } catch { n = path.basename(urlPathname(url)); }
+            name = (name || n) + (path.extname(name || n) ? '' : extOf(url, mime));
+          }
+          // chỉ bật bảng tải nhỏ, không mở giao diện chính của app
+          openPopup({ mode: 'ask', info: { url, type: 'file', size, mime, name: cleanName(name, 'file'), ref: String(d.referrer || '') } });
+        })();
+        return;
       }
       if (req.url === '/open') { raiseWindow(); send('open-url', url); return reply(200, { ok: true }); }
       reply(404, { ok: false });

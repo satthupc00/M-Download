@@ -1,15 +1,11 @@
 {
-  "version": "1.4.0",
-  "date": "2026-11-15",
-  "new": [
-    "App đổi tên thành M Download",
-    "Bấm X thì app vẫn chạy ngầm, có icon ở khay hệ thống (góc phải thanh taskbar) để mở lại hoặc thoát hẳn",
-    "Bắt link từ Chrome chỉ hiện một bảng tải nhỏ, không bật giao diện chính của app"
-  ],
+  "version": "1.5.0",
+  "date": "2026-11-25",
+  "new": [],
   "improved": [
-    "Extension ẩn bảng tải của Chrome khi link đã chuyển sang M Download, và có công tắc tạm tắt",
-    "Nút extension trong Cài đặt đổi thành copy đường dẫn thư mục",
-    "Mở cùng Windows thì app chạy ngầm luôn, không hiện cửa sổ"
+    "Bấm link tải trong Chrome: extension chặn ngay từ cú bấm nên Chrome không tải và không hiện bảng tải nữa",
+    "Bảng tải của Chrome được tắt sẵn khi M Download đang chạy, tự bật lại khi app tắt",
+    "Link tải qua nút bấm hoặc chuyển hướng: bảng tải hiện đúng tên file thật (kể cả tên tiếng Việt) và kích thước"
   ],
   "fixed": []
 }
