@@ -258,6 +258,25 @@ function updateYtdlp() {
   settings.ytUpdated = Date.now(); saveSettings();
   execFile(ytPath(), ['-U'], { windowsHide: true }, () => {});
 }
+// Ghi cookie của trình duyệt ra file tạm cho công cụ tải video (xoá ngay khi tải xong)
+function writeCookieJar(list, id) {
+  if (!Array.isArray(list) || !list.length) return null;
+  const lines = ['# Netscape HTTP Cookie File'];
+  for (const c of list) {
+    if (!c || !c.name || !c.domain) continue;
+    const clean = (v) => String(v ?? '').replace(/[\t\r\n]/g, '');
+    const dom = clean(c.domain);
+    lines.push([(c.httpOnly ? '#HttpOnly_' : '') + dom, dom.startsWith('.') ? 'TRUE' : 'FALSE', clean(c.path || '/'),
+      c.secure ? 'TRUE' : 'FALSE', Math.floor(Number(c.expirationDate) || 0), clean(c.name), clean(c.value)].join('\t'));
+  }
+  try {
+    const dir = path.join(app.getPath('userData'), 'tmp');
+    fs.mkdirSync(dir, { recursive: true });
+    const f = path.join(dir, `cookies-${id}.txt`);
+    fs.writeFileSync(f, lines.join('\n') + '\n', { mode: 0o600 });
+    return f;
+  } catch { return null; }
+}
 function killProc(b) {
   if (!b.proc) return;
   if (isWin) execFile('taskkill', ['/pid', String(b.proc.pid), '/T', '/F'], { windowsHide: true }, () => {});
@@ -285,7 +304,12 @@ async function startYtdl(b) {
       '--progress-template', 'download:MDL|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s'];
     if (q !== 'audio') args.push('--merge-output-format', 'mp4');
     if (t.ff && t.ff !== 'system') args.push('--ffmpeg-location', t.ff);
-    if (b.stream && b.referer) args.push('--referer', b.referer);
+    if (b.referer && (b.stream || b.web)) args.push('--referer', b.referer);
+    if (b.web) {
+      if (b.web.ua) args.push('--user-agent', b.web.ua);
+      const jar = writeCookieJar(b.web.cookies, b.id);
+      if (jar) { b.jar = jar; args.push('--cookies', jar); }
+    }
     args.push(it.url);
     const proc = spawn(t.yt, args, { windowsHide: true });
     b.proc = proc;
@@ -304,6 +328,7 @@ async function startYtdl(b) {
     proc.on('error', () => { err = err || 'spawn'; });
     proc.on('close', (code) => {
       b.proc = null;
+      if (b.jar) { fs.rm(b.jar, { force: true }, () => {}); b.jar = null; }
       if (b.state === 'running') {
         if (code === 0) { it.state = 'done'; try { it.got = fs.statSync(it.dest).size; } catch { /* giữ số cũ */ } b.note = ''; }
         else { it.state = 'error'; b.note = ytError(err); }
@@ -348,10 +373,12 @@ function startDownload(req, sender) {
       items: [{ url: i.url, ref: i.ref, dest, state: 'queued', got: 0, total: 0 }] });
   }
   for (const i of videos) {
-    const dir = catDir('video');
+    const dir = (typeof i.dir === 'string' && i.dir) || catDir('video');
     fs.mkdirSync(dir, { recursive: true });
-    out.push({ id: nextId++, kind: 'ytdl', title: cleanName(req.title, 'Video'), dir, isChapter: false, state: 'running', referer: req.pageUrl,
-      ctrl: new Set(), stream: i.type === 'stream', quality: settings.videoQuality,
+    const quality = ['best', '2160', '1080', '720', '480', 'audio'].includes(i.quality) ? i.quality : settings.videoQuality;
+    const web = fromChrome.get(i.url) || null;   // video gửi từ trình duyệt: dùng phiên đăng nhập của trình duyệt
+    out.push({ id: nextId++, kind: 'ytdl', title: cleanName(i.name || req.title, 'Video'), dir, isChapter: false, state: 'running',
+      referer: i.ref || req.pageUrl, ctrl: new Set(), stream: i.type === 'stream', quality, web,
       items: [{ url: i.url, dest: dir, state: 'queued', got: 0, total: 0 }] });
   }
   if (sender && (!win || sender !== win.webContents)) for (const b of out) { b.popup = true; b.popupWc = sender; }
@@ -487,6 +514,13 @@ function startExtServer() {
         return;
       }
       if (req.url === '/open') { raiseWindow(); send('open-url', url); return reply(200, { ok: true }); }
+      if (req.url === '/video') {        // video từ menu chuột phải của trình duyệt
+        const kind = d.kind === 'stream' ? 'stream' : 'ytdl';
+        fromChrome.set(url, { cookie: '', ua: String(d.ua || ''), cookies: Array.isArray(d.cookies) ? d.cookies.slice(0, 400) : [] });
+        if (d.referrer) referers.set(url, String(d.referrer));
+        openPopup({ mode: 'video', info: { url, type: kind, name: cleanName(String(d.title || ''), 'Video'), ref: String(d.referrer || ''), page: String(d.page || '') } });
+        return reply(200, { ok: true });
+      }
       reply(404, { ok: false });
     });
   });
@@ -497,7 +531,7 @@ function startExtServer() {
 const popups = new Map();
 function openPopup(payload) {
   const p = new BrowserWindow({
-    width: 520, height: payload.mode === 'ask' ? 330 : 236, useContentSize: true, resizable: false, maximizable: false, fullscreenable: false,
+    width: 520, height: payload.mode === 'done' ? 236 : 330, useContentSize: true, resizable: false, maximizable: false, fullscreenable: false,
     title: 'M Download', backgroundColor: '#1F2126', show: false, alwaysOnTop: true,
     icon: path.join(__dirname, 'build', 'icon.png'),
     titleBarStyle: 'hidden', titleBarOverlay: { color: '#1F2126', symbolColor: '#FFFFFF', height: 40 },
@@ -513,6 +547,7 @@ function openPopup(payload) {
 ipcMain.handle('popup-init', (e) => {
   const payload = popups.get(e.sender.id) || null;
   if (payload && payload.mode === 'ask') { const c = catOf(payload.info.name); payload.plan = { cat: c[0], label: c[1], dir: catDir(c[0]) }; }
+  if (payload && payload.mode === 'video') { payload.plan = { cat: 'video', label: 'Video', dir: catDir('video') }; payload.quality = settings.videoQuality; }
   setTimeout(pushState, 0);
   return payload && { ...payload, showDone: settings.showDone !== false };
 });

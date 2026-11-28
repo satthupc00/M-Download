@@ -1,11 +1,14 @@
 {
-  "version": "1.5.0",
-  "date": "2026-11-25",
-  "new": [],
+  "version": "1.6.0",
+  "date": "2026-11-28",
+  "new": [
+    "Chuột phải vào video trong Chrome, chọn \"Tải video này bằng M Download\" là hiện bảng tải video (YouTube, Facebook, TikTok, trang phim…)",
+    "Chuột phải vào trang: \"Tải video trên trang này\"; chuột phải vào link: \"Tải video ở link này\"",
+    "Nút \"Tải video trên trang này\" trong bảng của extension",
+    "Bảng tải video cho chọn chất lượng và nơi lưu ngay trước khi tải"
+  ],
   "improved": [
-    "Bấm link tải trong Chrome: extension chặn ngay từ cú bấm nên Chrome không tải và không hiện bảng tải nữa",
-    "Bảng tải của Chrome được tắt sẵn khi M Download đang chạy, tự bật lại khi app tắt",
-    "Link tải qua nút bấm hoặc chuyển hướng: bảng tải hiện đúng tên file thật (kể cả tên tiếng Việt) và kích thước"
+    "Video tải từ Chrome dùng đúng phiên đăng nhập của Chrome, nên tải được cả video cần đăng nhập"
   ],
   "fixed": []
 }

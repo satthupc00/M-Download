@@ -15,6 +15,13 @@ async function check() {
 }
 check();
 
+$('#video').onclick = async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab || !/^https?:/.test(tab.url || '')) { status(false, 'Trang này không có video để tải'); return; }
+  const r = await chrome.runtime.sendMessage({ type: 'video-tab', url: tab.url, tabId: tab.id, title: tab.title }).catch(() => null);
+  if (r && r.ok) window.close(); else status(false, 'Chưa mở app M Download');
+};
+
 $('#open').onclick = async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !/^https?:/.test(tab.url || '')) { status(false, 'Trang này không mở được trong app'); return; }

@@ -12,18 +12,25 @@ function eta(b) {
   const s = Math.round((b.total - b.got) / b.speed);
   return s > 90 ? ` · còn ${Math.round(s / 60)} phút` : ` · còn ${s} giây`;
 }
-const st = { info: null, plan: null, dir: '', id: null, done: null, showDone: true, seen: false };
+const st = { info: null, plan: null, dir: '', id: null, done: null, showDone: true, seen: false, video: false };
 const title = (t) => { $('#ptitle').textContent = '· ' + t; };
 
 function showAsk() {
   const it = st.info;
-  title('Tải file');
+  title(st.video ? 'Tải video' : 'Tải file');
+  document.querySelectorAll('.fileRow').forEach((e) => { e.hidden = st.video; });
+  document.querySelectorAll('.vidRow').forEach((e) => { e.hidden = !st.video; });
+  if (st.video) {
+    $('label[for=dName]').textContent = 'Tên video';
+    $('#dKind').textContent = it.type === 'stream' ? 'Video dạng luồng' : 'Video trên trang';
+    $('#dName').placeholder = 'Tự lấy tên video';
+  }
   $('#dName').value = it.name;
   $('#dUrl').textContent = it.url; $('#dUrl').title = it.url;
   $('#dSize').textContent = fmtSize(it.size) || 'Chưa rõ kích thước';
   $('#dCat').textContent = st.plan.label;
   $('#dDir').textContent = st.dir; $('#dDir').title = st.dir;
-  $('#dRememberText').textContent = `Luôn lưu loại "${st.plan.label}" vào thư mục này`;
+  $('#dRememberText').textContent = `Luôn lưu ${st.video ? 'video' : `loại "${st.plan.label}"`} vào thư mục này`;
   $('#ask').hidden = false;
   $('#dGo').focus();
 }
@@ -38,8 +45,12 @@ $('#dGo').onclick = async () => {
   const it = st.info;
   $('#dGo').disabled = true;
   if ($('#dRemember').checked) await api.setTypeDir(st.plan.cat, st.dir);
-  const ids = await api.download({ title: '', pageUrl: it.ref || '',
-    items: [{ url: it.url, type: 'file', mime: it.mime, name: $('#dName').value.trim() || it.name, dir: st.dir, ref: it.ref }] });
+  const name = $('#dName').value.trim();
+  const item = st.video
+    ? { url: it.url, type: it.type, name: it.type === 'stream' ? name || it.name : name === it.name ? '' : name, dir: st.dir, ref: it.ref, quality: $('#dQuality').value }
+    : { url: it.url, type: 'file', mime: it.mime, name: name || it.name, dir: st.dir, ref: it.ref };
+  if (st.video) api.setSetting('videoQuality', item.quality);
+  const ids = await api.download({ title: it.name, pageUrl: it.ref || '', items: [item] });
   st.id = ids[0];
   $('#ask').hidden = true;
   showProg(false);
@@ -100,5 +111,7 @@ addEventListener('keydown', (e) => { if (e.key === 'Escape') window.close(); });
   st.showDone = p.showDone;
   if (p.mode === 'done') { st.id = p.done.id; showDone(p.done); return; }
   st.info = p.info; st.plan = p.plan; st.dir = p.plan.dir;
+  st.video = p.mode === 'video';
+  if (st.video) $('#dQuality').value = p.quality || '1080';
   showAsk();
 })();

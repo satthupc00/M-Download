@@ -23,7 +23,16 @@
   <div class="form">
     <label for="dName">Tên file</label><input type="text" id="dName" spellcheck="false">
     <span>Địa chỉ</span><div class="path" id="dUrl"></div>
-    <span>Kích thước</span><div><span id="dSize"></span> · <span id="dCat"></span></div>
+    <span class="fileRow">Kích thước</span><div class="fileRow"><span id="dSize"></span> · <span id="dCat"></span></div>
+    <span class="vidRow" hidden>Chất lượng</span><div class="vidRow line" hidden>
+      <select id="dQuality">
+        <option value="best">Cao nhất có thể</option>
+        <option value="2160">Tối đa 4K</option>
+        <option value="1080">Tối đa 1080p</option>
+        <option value="720">Tối đa 720p</option>
+        <option value="480">Tối đa 480p</option>
+        <option value="audio">Chỉ lấy âm thanh</option>
+      </select><span class="sp"></span><span id="dKind" style="color:var(--muted)"></span></div>
     <span>Lưu vào</span><div class="line"><span class="path" id="dDir"></span><button class="second" id="dPick">Đổi…</button></div>
     <span></span><label class="line check"><input type="checkbox" id="dRemember"> <span id="dRememberText"></span></label>
   </div>

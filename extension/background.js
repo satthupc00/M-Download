@@ -75,18 +75,65 @@ chrome.downloads.onCreated.addListener(async (item) => {
   }
 });
 
+/* ---------- ghi lại luồng video trang đang phát (m3u8, mpd) để tải bằng chuột phải ---------- */
+const STREAM = /\.(m3u8|mpd)(\?|$)/i;
+async function streamsOf(tabId) { const k = 's' + tabId; return (await chrome.storage.session.get(k))[k] || []; }
+chrome.webRequest.onResponseStarted.addListener((d) => {
+  if (d.tabId < 0) return;
+  const ct = ((d.responseHeaders || []).find((h) => h.name.toLowerCase() === 'content-type') || {}).value || '';
+  if (!STREAM.test(new URL(d.url).pathname + '?') && !/mpegurl|dash\+xml/i.test(ct)) return;
+  const k = 's' + d.tabId;
+  chrome.storage.session.get(k).then((v) => {
+    const list = v[k] || [];
+    if (list.includes(d.url)) return;
+    list.push(d.url);
+    chrome.storage.session.set({ [k]: list.slice(0, 30) });   // luồng đầu tiên thường là danh sách chính (có đủ chất lượng)
+  });
+}, { urls: ['http://*/*', 'https://*/*'], types: ['xmlhttprequest', 'media', 'other'] }, ['responseHeaders']);
+chrome.tabs.onUpdated.addListener((tabId, c) => { if (c.url) chrome.storage.session.remove('s' + tabId); });
+chrome.tabs.onRemoved.addListener((tabId) => chrome.storage.session.remove('s' + tabId));
+
+// Gửi video sang app: link file thẳng -> tải như file; luồng đã ghi lại -> tải luồng; còn lại -> để app tự tìm video trên trang
+const DIRECT = /\.(mp4|webm|mkv|mov|m4v|avi|flv|mp3|m4a|ogg|wav|flac|aac)(\?|$)/i;
+async function sendVideo({ src = '', page = '', tabId = -1, title = '' }) {
+  if (/^https?:/.test(src) && !STREAM.test(src) && DIRECT.test(new URL(src).pathname + '?')) return sendLink(src, { referrer: page });
+  let url = page, kind = 'page';
+  if (/^https?:/.test(src) && STREAM.test(new URL(src).pathname + '?')) { url = src; kind = 'stream'; }
+  else if (tabId >= 0) { const s = await streamsOf(tabId); if (s.length) { url = s[0]; kind = 'stream'; } }
+  if (!/^https?:/.test(url)) throw new Error('no-url');
+  let cookies = [];
+  try { cookies = (await chrome.cookies.getAll({ url: page || url })).concat(kind === 'stream' ? await chrome.cookies.getAll({ url }) : []); } catch { /* bỏ qua */ }
+  await post('/video', { url, kind, title, page, referrer: page, ua: navigator.userAgent,
+    cookies: cookies.map((c) => ({ domain: c.domain, path: c.path, secure: c.secure, httpOnly: c.httpOnly, expirationDate: c.expirationDate, name: c.name, value: c.value })) });
+  warn(false);
+  if (!alive) setAlive(true);
+}
+
 /* ---------- menu chuột phải ---------- */
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({ id: 'video', title: 'Tải video này bằng M Download', contexts: ['video', 'audio'] });
+    chrome.contextMenus.create({ id: 'pagevideo', title: 'Tải video trên trang này bằng M Download', contexts: ['page', 'frame'] });
+    chrome.contextMenus.create({ id: 'linkvideo', title: 'Tải video ở link này bằng M Download', contexts: ['link'] });
     chrome.contextMenus.create({ id: 'link', title: 'Tải link này bằng M Download', contexts: ['link'] });
-    chrome.contextMenus.create({ id: 'media', title: 'Tải ảnh / video này bằng M Download', contexts: ['image', 'video', 'audio'] });
+    chrome.contextMenus.create({ id: 'image', title: 'Tải ảnh này bằng M Download', contexts: ['image'] });
     chrome.contextMenus.create({ id: 'page', title: 'Mở trang này trong M Download (bắt ảnh, video)', contexts: ['page'] });
   });
 });
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+async function handleMenu(info, tab) {
+  const page = info.pageUrl || (tab && tab.url) || '', tabId = tab ? tab.id : -1, title = (tab && tab.title) || '';
   try {
-    if (info.menuItemId === 'link') await sendLink(info.linkUrl, { referrer: info.pageUrl || '' });
-    else if (info.menuItemId === 'media') await sendLink(info.srcUrl, { referrer: info.pageUrl || '' });
-    else if (info.menuItemId === 'page') { await post('/open', { url: info.pageUrl || (tab && tab.url) }); warn(false); }
+    if (info.menuItemId === 'video') await sendVideo({ src: info.srcUrl || '', page, tabId, title });
+    else if (info.menuItemId === 'pagevideo') await sendVideo({ page, tabId, title });
+    else if (info.menuItemId === 'linkvideo') await sendVideo({ page: info.linkUrl, title: info.selectionText || '' });
+    else if (info.menuItemId === 'link') await sendLink(info.linkUrl, { referrer: page });
+    else if (info.menuItemId === 'image') await sendLink(info.srcUrl, { referrer: page });
+    else if (info.menuItemId === 'page') { await post('/open', { url: page }); warn(false); }
   } catch { warn(true); }
+}
+chrome.contextMenus.onClicked.addListener(handleMenu);
+chrome.runtime.onMessage.addListener((m, _s, reply) => {
+  if (!m || m.type !== 'video-tab') return;
+  sendVideo({ page: m.url, tabId: m.tabId, title: m.title }).then(() => reply({ ok: true }), () => reply({ ok: false }));
+  return true;
 });
