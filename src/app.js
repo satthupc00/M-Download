@@ -464,6 +464,7 @@ function renderDownloads({ active, done }) {
     const [cls, text] = runText(b);
     const s = el.querySelector('.meta span');
     s.className = cls; s.textContent = text;
+    s.title = b.detail || '';
     const frac = b.count > 1 ? b.done / b.count : (b.total ? b.got / b.total : 0);
     el.querySelector('u').style.transform = `scaleX(${Math.min(1, frac)})`;
     const act = b.state === 'paused' ? 'resume' : b.state === 'error' ? 'retry' : 'pause';

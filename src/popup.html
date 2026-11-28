@@ -14,6 +14,8 @@
 .pbody .form{border-top:1px solid var(--line)}
 .pbody .dfoot{margin-top:auto;padding-top:14px}
 .credit{position:fixed;left:14px;bottom:10px}
+.perr{margin-top:6px;padding:6px 8px;border-radius:6px;background:rgba(229,56,59,.1);color:#F0A3A4;font-size:11.5px;line-height:1.35;
+  max-height:48px;overflow:auto;user-select:text;word-break:break-word}
 </style>
 </head>
 <body>
@@ -47,6 +49,7 @@
   <div class="pname" id="pName"></div>
   <div class="bar big"><u id="pBar"></u></div>
   <div class="pinfo"><span id="pInfo"></span><span class="sp"></span><span id="pPct"></span></div>
+  <div class="perr" id="pErr" hidden></div>
   <div class="path ppath" id="pPath"></div>
   <div class="dfoot" id="pRun">
     <button class="second" id="pCancel">Huỷ tải</button>

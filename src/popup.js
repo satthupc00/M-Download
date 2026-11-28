@@ -81,10 +81,12 @@ api.onDownloads(({ active, done }) => {
     $('#pName').textContent = b.title;
     let cls = '', text;
     const prog = b.total ? `${fmtSize(b.got) || '0 B'} / ${fmtSize(b.total)}` : fmtSize(b.got) || 'Đang kết nối…';
-    if (b.state === 'error') { cls = 'err'; text = b.note || 'Tải lỗi · bấm Tải lại để thử lại'; }
+    if (b.state === 'error') { cls = 'err'; text = (b.note || 'Tải lỗi · bấm Tải lại để thử lại').replace(' · bấm để thử lại', ' · bấm Tải lại để thử lại'); }
     else if (b.state === 'paused') { cls = 'warn'; text = 'Tạm dừng · ' + prog; }
     else text = b.note || prog + (b.speed ? ` · ${fmtSize(b.speed)}/s` : '') + eta(b);
     $('#pInfo').textContent = text; $('#pInfo').parentNode.className = 'pinfo ' + cls;
+    $('#pErr').hidden = !(b.state === 'error' && b.detail);
+    $('#pErr').textContent = b.detail || ''; $('#pErr').title = b.detail || '';
     const frac = b.total ? b.got / b.total : 0;
     $('#pBar').style.transform = `scaleX(${Math.min(1, frac)})`;
     $('#pPct').textContent = frac ? Math.floor(frac * 100) + '%' : '';

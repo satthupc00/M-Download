@@ -1,14 +1,14 @@
 {
-  "version": "1.6.0",
+  "version": "1.6.1",
   "date": "2026-11-28",
-  "new": [
-    "Chuột phải vào video trong Chrome, chọn \"Tải video này bằng M Download\" là hiện bảng tải video (YouTube, Facebook, TikTok, trang phim…)",
-    "Chuột phải vào trang: \"Tải video trên trang này\"; chuột phải vào link: \"Tải video ở link này\"",
-    "Nút \"Tải video trên trang này\" trong bảng của extension",
-    "Bảng tải video cho chọn chất lượng và nơi lưu ngay trước khi tải"
-  ],
+  "new": [],
   "improved": [
-    "Video tải từ Chrome dùng đúng phiên đăng nhập của Chrome, nên tải được cả video cần đăng nhập"
+    "Tải video YouTube: app tự cài thêm bộ xử lý YouTube ở lần tải đầu tiên",
+    "Video từ trình duyệt bị lỗi thì app tự thử lại một lần theo cách khác",
+    "Khi tải video lỗi, bảng tải hiện dòng lỗi thật và lý do dễ hiểu hơn",
+    "Công cụ tải video được cập nhật mỗi ngày để theo kịp thay đổi của YouTube"
   ],
-  "fixed": []
+  "fixed": [
+    "Sửa lỗi tải video YouTube từ menu chuột phải của Chrome"
+  ]
 }

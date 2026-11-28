@@ -110,7 +110,7 @@ function summary(b) {
   return {
     id: b.id, title: b.title, dir: b.dir, isChapter: b.isChapter, state: b.state, count: b.items.length, done, failed,
     got: b.items.reduce((s, i) => s + i.got, 0), total: b.items.reduce((s, i) => s + (i.total || 0), 0),
-    speed: b.speed || 0, note: b.note || '', kind: b.kind || 'file', popup: !!b.popup, file: b.items.length === 1 ? b.items[0].dest : b.dir,
+    speed: b.speed || 0, note: b.note || '', detail: b.state === 'error' ? b.detail || '' : '', kind: b.kind || 'file', popup: !!b.popup, file: b.items.length === 1 ? b.items[0].dest : b.dir,
   };
 }
 function pushState() {
@@ -204,6 +204,20 @@ const ytPath = () => path.join(toolsDir(), isWin ? 'yt-dlp.exe' : process.platfo
 const ffPath = () => path.join(toolsDir(), 'ffmpeg.exe');
 const YT_URL = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/';
 const FF_URL = 'https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip';
+// Deno: bộ chạy JavaScript mà yt-dlp cần để giải mã link video YouTube
+const DENO_URL = 'https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip';
+const denoPath = () => path.join(toolsDir(), 'deno.exe');
+async function unzipOne(url, exeName, label, onNote) {
+  const zip = path.join(toolsDir(), exeName + '.zip'), tmp = path.join(toolsDir(), exeName + '-tmp');
+  await fetchToFile(url, zip, (p) => onNote(`Đang tải ${label} (chỉ lần đầu)… ${p}%`));
+  onNote(`Đang giải nén ${label}…`);
+  fs.rmSync(tmp, { recursive: true, force: true }); fs.mkdirSync(tmp, { recursive: true });
+  try {
+    await new Promise((res, rej) => execFile('tar', ['-xf', zip, '-C', tmp], { windowsHide: true }, (e) => (e ? rej(e) : res())));
+    const exe = findFile(tmp, exeName);
+    if (exe) fs.copyFileSync(exe, path.join(toolsDir(), exeName));
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); fs.rmSync(zip, { force: true }); }
+}
 
 async function fetchToFile(url, dest, onProgress) {
   const res = await net.fetch(url);
@@ -227,7 +241,7 @@ function findFile(dir, name) {
   return null;
 }
 let toolsJob = null;
-function ensureTools(onNote) {
+function ensureTools(onNote, needDeno = false) {
   if (!toolsJob) {
     toolsJob = (async () => {
       fs.mkdirSync(toolsDir(), { recursive: true });
@@ -237,16 +251,11 @@ function ensureTools(onNote) {
         settings.ytUpdated = Date.now(); saveSettings();
       }
       if (isWin && !fs.existsSync(ffPath())) {
-        try {   // ffmpeg để ghép hình + tiếng (cần cho 1080p trở lên)
-          const zip = path.join(toolsDir(), 'ffmpeg.zip'), tmp = path.join(toolsDir(), 'ffmpeg-tmp');
-          await fetchToFile(FF_URL, zip, (p) => onNote(`Đang tải bộ ghép video (chỉ lần đầu)… ${p}%`));
-          onNote('Đang giải nén bộ ghép video…');
-          fs.rmSync(tmp, { recursive: true, force: true }); fs.mkdirSync(tmp, { recursive: true });
-          await new Promise((res, rej) => execFile('tar', ['-xf', zip, '-C', tmp], { windowsHide: true }, (e) => (e ? rej(e) : res())));
-          const exe = findFile(tmp, 'ffmpeg.exe');
-          if (exe) fs.copyFileSync(exe, ffPath());
-          fs.rmSync(tmp, { recursive: true, force: true }); fs.rmSync(zip, { force: true });
-        } catch { /* không có ffmpeg: vẫn tải được nhưng chất lượng thấp hơn */ }
+        // ffmpeg để ghép hình + tiếng (cần cho 1080p trở lên); thiếu thì vẫn tải được nhưng chất lượng thấp hơn
+        try { await unzipOne(FF_URL, 'ffmpeg.exe', 'bộ ghép video', onNote); } catch { /* bỏ qua */ }
+      }
+      if (isWin && needDeno && !fs.existsSync(denoPath())) {
+        try { await unzipOne(DENO_URL, 'deno.exe', 'bộ xử lý YouTube', onNote); } catch { /* bỏ qua, báo lỗi rõ ở bước tải */ }
       }
       return { yt: ytPath(), ff: isWin ? (fs.existsSync(ffPath()) ? toolsDir() : null) : 'system' };
     })().finally(() => { toolsJob = null; });
@@ -254,9 +263,18 @@ function ensureTools(onNote) {
   return toolsJob;
 }
 function updateYtdlp() {
-  if (!fs.existsSync(ytPath()) || Date.now() - (settings.ytUpdated || 0) < 3 * 864e5) return;
+  if (!fs.existsSync(ytPath()) || Date.now() - (settings.ytUpdated || 0) < 864e5) return;
   settings.ytUpdated = Date.now(); saveSettings();
   execFile(ytPath(), ['-U'], { windowsHide: true }, () => {});
+}
+// Lưu nhật ký lỗi tải video (không ghi cookie) để dễ tìm nguyên nhân
+function saveVideoLog(b, args, err) {
+  try {
+    const dir = path.join(app.getPath('userData'), 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    const safe = args.map((a, i) => (args[i - 1] === '--cookies' ? '<cookies>' : a));
+    fs.writeFileSync(path.join(dir, 'video-error.log'), `M Download ${app.getVersion()} · ${new Date().toISOString()}\n${b.items[0].url}\nyt-dlp ${safe.join(' ')}\n\n${err}`);
+  } catch { /* bỏ qua */ }
 }
 // Ghi cookie của trình duyệt ra file tạm cho công cụ tải video (xoá ngay khi tải xong)
 function writeCookieJar(list, id) {
@@ -283,7 +301,12 @@ function killProc(b) {
   else b.proc.kill();
 }
 function ytError(text) {
-  if (/Sign in|age|confirm you.re not a bot|login/i.test(text)) return 'Video cần đăng nhập hoặc bị giới hạn, không tải được';
+  if (/confirm you.re not a bot/i.test(text)) return 'YouTube nghi là máy tự động, mở video trong Chrome rồi thử lại';
+  if (/age[- ]restricted|confirm your age|Sign in|login|members[- ]only/i.test(text)) return 'Video cần đăng nhập hoặc bị giới hạn, không tải được';
+  if (/JavaScript runtime|n challenge|nsig|signature/i.test(text)) return 'Thiếu bộ xử lý YouTube, bấm Tải lại để app tự cài';
+  if (/Requested format is not available/i.test(text)) return 'Không có chất lượng đã chọn, thử chọn chất lượng khác';
+  if (/HTTP Error 403|Forbidden/i.test(text)) return 'Máy chủ từ chối tải, bấm Tải lại để thử lần nữa';
+  if (/timed out|getaddrinfo|Connection|network/i.test(text)) return 'Lỗi mạng, kiểm tra mạng rồi bấm Tải lại';
   if (/Unsupported URL/i.test(text)) return 'Trang này chưa được hỗ trợ tải video';
   if (/Private video|unavailable|removed/i.test(text)) return 'Video không còn hoặc ở chế độ riêng tư';
   if (/DRM/i.test(text)) return 'Video có khoá bản quyền, không tải được';
@@ -293,7 +316,8 @@ async function startYtdl(b) {
   const it = b.items[0];
   b.starting = true; it.state = 'running'; b.note = 'Đang chuẩn bị…'; dirty = true;
   try {
-    const t = await ensureTools((n) => { b.note = n; dirty = true; });
+    const yt = /(^|\.)(youtube\.com|youtu\.be)$/i.test((() => { try { return new URL(it.url).hostname; } catch { return ''; } })());
+    const t = await ensureTools((n) => { b.note = n; dirty = true; }, yt);
     if (b.state !== 'running') { it.state = 'queued'; return; }
     b.note = 'Đang lấy thông tin video…'; dirty = true;
     const q = b.quality, h = /^\d+$/.test(q) ? `[height<=${q}]` : '';
@@ -304,14 +328,15 @@ async function startYtdl(b) {
       '--progress-template', 'download:MDL|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s'];
     if (q !== 'audio') args.push('--merge-output-format', 'mp4');
     if (t.ff && t.ff !== 'system') args.push('--ffmpeg-location', t.ff);
-    if (b.referer && (b.stream || b.web)) args.push('--referer', b.referer);
-    if (b.web) {
-      if (b.web.ua) args.push('--user-agent', b.web.ua);
-      const jar = writeCookieJar(b.web.cookies, b.id);
-      if (jar) { b.jar = jar; args.push('--cookies', jar); }
-    }
+    if (b.referer && (b.stream || (b.web && !yt))) args.push('--referer', b.referer);
+    // YouTube: lần đầu tải không kèm cookie (ổn định hơn); chỉ thử lại với cookie khi YouTube đòi đăng nhập
+    const useCookies = b.web && (yt ? b.withCookies : !b.withoutCookies);
+    if (b.web && b.web.ua && !yt) args.push('--user-agent', b.web.ua);
+    if (useCookies) { const jar = writeCookieJar(b.web.cookies, b.id); if (jar) { b.jar = jar; args.push('--cookies', jar); } }
     args.push(it.url);
-    const proc = spawn(t.yt, args, { windowsHide: true });
+    // để yt-dlp tìm thấy deno/ffmpeg trong thư mục công cụ của app
+    const env = { ...process.env, PATH: toolsDir() + path.delimiter + (process.env.PATH || '') };
+    const proc = spawn(t.yt, args, { windowsHide: true, env });
     b.proc = proc;
     let buf = '', err = '';
     proc.stdout.on('data', (c) => {
@@ -324,14 +349,24 @@ async function startYtdl(b) {
         } else if (l.startsWith('MDLFILE|')) { it.dest = l.slice(8).trim(); b.title = path.basename(it.dest); }
       }
     });
-    proc.stderr.on('data', (c) => { err = (err + c.toString('utf8')).slice(-2000); });
+    proc.stderr.on('data', (c) => { err = (err + c.toString('utf8')).slice(-6000); });
     proc.on('error', () => { err = err || 'spawn'; });
     proc.on('close', (code) => {
       b.proc = null;
       if (b.jar) { fs.rm(b.jar, { force: true }, () => {}); b.jar = null; }
       if (b.state === 'running') {
-        if (code === 0) { it.state = 'done'; try { it.got = fs.statSync(it.dest).size; } catch { /* giữ số cũ */ } b.note = ''; }
-        else { it.state = 'error'; b.note = ytError(err); }
+        if (code === 0) { it.state = 'done'; try { it.got = fs.statSync(it.dest).size; } catch { /* giữ số cũ */ } b.note = ''; b.detail = ''; }
+        else {
+          const lines = err.split(/\r?\n/).filter((l) => /^ERROR:/.test(l));
+          b.detail = (lines.pop() || err.trim().split(/\r?\n/).pop() || 'Lỗi không rõ').replace(/^ERROR:\s*/, '').slice(0, 400);
+          saveVideoLog(b, args, err);
+          // video từ trình duyệt: tự thử lại một lần, đổi cách dùng cookie
+          if (b.web && !b.retried && !/Unsupported URL|DRM|Private video/i.test(err)) {
+            b.retried = true;
+            if (yt) b.withCookies = true; else b.withoutCookies = true;
+            it.state = 'queued'; b.note = 'Đang thử lại cách khác…';
+          } else { it.state = 'error'; b.note = ytError(err); }
+        }
       } else it.state = 'queued';
       finishIfDone(b); dirty = true; pump();
     });
@@ -399,7 +434,7 @@ function batchAction({ id, action }) {
     b.state = 'running';
   } else if (action === 'retry' && b.state === 'error') {
     for (const it of b.items) if (it.state === 'error') it.state = 'queued';
-    b.note = '';
+    b.note = ''; b.retried = false;
     b.state = 'running';
   } else if (action === 'cancel') {
     b.state = 'cancelled';
